@@ -1,3 +1,5 @@
 .vs
 *.sln
 *.pyproj
+config.json
+__pycache__/*
