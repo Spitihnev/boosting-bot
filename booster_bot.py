@@ -7,25 +7,34 @@ import re
 
 import config
 import db_handling
+import constants
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
 LOG.setLevel(level=logging.DEBUG)
 client = commands.Bot(command_prefix='!')
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 @client.event
 async def on_ready():
     LOG.debug('Connected')
     await client.change_presence(activity=discord.Game(name='Boosting Day \'n Night '))
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 @client.event
 async def on_message(message):
-    LOG.debug(f'{client.user}')
-    LOG.debug(f'Registered message from {message.author} with content {message.content}')
+    #LOG.debug(f'{client.user}')
+    #LOG.debug(f'Registered message from {message.author} with content {message.content}')
     if message.author == client.user or message.author.bot:
         return
 
-    if message.channel.name == 'general':
+    #usr = await client.fetch_user(str(config.get('my_id')))
+    #LOG.info(f'{usr.id} {usr.name}#{usr.discriminator}')
+
+    if message.channel.name == 'generall':
+        
         LOG.debug('Got boost message to process')
         res = process_boost(message.content)
         if res:
@@ -34,33 +43,67 @@ async def on_message(message):
             LOG.debug('Boost not processed')
     await client.process_commands(message)
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 @client.command(name='quit')
 async def shutdown(ctx):
     if ctx.author.id == config.get('my_id'):
         LOG.debug('Leaving...')
         await client.logout()
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 @client.command(name='gold-add')
-async def gold_add(ctx, mention, amount):
+async def gold_add(ctx, mention: str, amount: int, realm_name: str):
     if not is_mention(mention):
+        await ctx.message.channel.send(f'"{mention}" is not a mention')
         raise BadArgument(f'"{mention}" is not a mention')
 
-    LOG.debug(f'{ctx.author} {type(mention)}{mention}|{amount}')
-    #TODO add gold to DB
+    if realm_name not in constants.EU_REALM_NAMES:
+        await ctx.message.channel.send(f'"{realm_name}" is not a known EU realm')
+        raise BadArgument(f'"{realm_name}" is not a known EU realm')
+
+    usr = client.get_user(mention2id(mention))
+    try:
+        exist_check = db_handling.name2id(f'{usr.name}#{usr.discriminator}')
+    except db_handling.UserNotFoundError:
+        db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id)
+    except db_handling.UserAlreadyExists:
+        pass
+
+    try:
+        db_handling.add_tranaction('add', f'{usr.name}#{usr.discriminator}', 1000, realm_name, 'test transaction')
+    except:
+        LOG.error(f'Database Error: {traceback.format_exc()}')
+        return
     await ctx.message.channel.send(f'Added {amount} to {mention} balance.')
 
-@client.command('gold')
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command('balance')
 async def gold(ctx):
-    raise NotImplementedError
+    LOG.debug(f'balance cmd by {ctx.message.author.id}')
+    try:
+        balance = db_handling.get_balance(ctx.message.author.id)
+    except:
+        LOG.error(f'Balance command error {traceback.format_exc()}')
+    res = balance.splitlines()
+    async with ctx.typing():
+        for line in res:
+            await ctx.message.channel.send(line)
 
 @client.command('gold-subtract')
 async def gold_subtract():
     raise NotImplementedError
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 @client.event
 async def on_reaction_add(reaction, user):
     if reaction.message.author == client.user:
         await reaction.message.channel.send(f'Glad to see your {reaction} to my message {user.name}.')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.event
 async def on_error(event, *args, **kwargs):
@@ -68,6 +111,8 @@ async def on_error(event, *args, **kwargs):
     LOG.error(f'{msg.author}@{msg.channel} : "{msg.content}"\n{traceback.format_exc()}')
     usr = client.get_user(config.get('my_id'))
     await usr.send(f'{msg.author}@{msg.channel} : "{msg.content}"\n{traceback.format_exc()}')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.event
 async def on_command_error(ctx, error):
@@ -78,7 +123,11 @@ async def on_command_error(ctx, error):
         await ctx.message.author.send(f'"{ctx.command}" is missing arguments, {error}')
         return
 
-    LOG.debug(f'Command error: {error}')
+    LOG.error(f'Command error: {ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
+    usr = client.get_user(config.get('my_id'))
+    await usr.send(f'{ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 def process_boost(msg):
     boostee = None
@@ -112,12 +161,23 @@ def process_boost(msg):
     LOG.debug(f'Processed boost: boostee:{boostee}, advertiser:{advertiser}, run:{comment}, price:{price}, boosters:{boosters}')
     return boostee, advertiser, comment, price, boosters
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 def is_mention(msg):
     return bool(re.match(r'^\<@!([0-9])+\>$', msg))
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 def parse_mention(msg):
     m = re.match(r'^(.+)?(\<@![0-9]+\>)(.+)?$', msg)
     if m:
         return m.group(2)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+def mention2id(mention):
+    return int(mention[3:-1])
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 client.run(config.get('token'))
