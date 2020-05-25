@@ -6,6 +6,7 @@ import traceback
 import re
 
 import config
+import db_handling
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
@@ -47,6 +48,14 @@ async def gold_add(ctx, mention, amount):
     LOG.debug(f'{ctx.author} {type(mention)}{mention}|{amount}')
     #TODO add gold to DB
     await ctx.message.channel.send(f'Added {amount} to {mention} balance.')
+
+@client.command('gold')
+async def gold(ctx):
+    raise NotImplementedError
+
+@client.command('gold-subtract')
+async def gold_subtract():
+    raise NotImplementedError
 
 @client.event
 async def on_reaction_add(reaction, user):
@@ -102,6 +111,7 @@ def process_boost(msg):
 
     LOG.debug(f'Processed boost: boostee:{boostee}, advertiser:{advertiser}, run:{comment}, price:{price}, boosters:{boosters}')
     return boostee, advertiser, comment, price, boosters
+
 def is_mention(msg):
     return bool(re.match(r'^\<@!([0-9])+\>$', msg))
 
