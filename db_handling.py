@@ -39,18 +39,19 @@ def get_balance(discord_id):
     else:
         res = ''
         for k, v in ttl.items():
-            res += f'{k: v}\n----------------\n'
+            res += '{}: {}\n----------------\n'.format(k, v)
         res += f'Total: {sum(ttl.values())}'
         return res
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def add_tranaction(type, booster_name, amount, realm_name, comment=None):
+def add_tranaction(type, booster_name, transaction_author, amount, realm_name, comment=None):
+    author_id = name2id(transaction_author)
     booster_id = name2id(booster_name)
     realm_id = realm_name2id(realm_name)
     with _db_connect() as crs:
         try:
-            crs.execute('insert into transactions (`type`, `booster_id`, `amount`, `comment`)', (type, booster_id, amount, comment))
+            crs.execute('insert into transactions (`type`, `author_id`, `booster_id`, `amount`, `realm_id`, `comment`) values (%s, %s, %s, %s, %s, %s)', (type, author_id, booster_id, amount, realm_id, comment))
         except:
             raise DatabaseError(f'Failed to add transaction with parameters {type} {booster_name} (translated into {booster_id}) {realm_name} (translated into {realm_id}) {amount} {comment}, reason: {traceback.format_exc()}')
 

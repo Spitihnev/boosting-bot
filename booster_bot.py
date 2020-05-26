@@ -1,7 +1,7 @@
 import logging
 import discord
 from discord.ext import commands
-from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument
+from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument, MissingAnyRole
 import traceback
 import re
 
@@ -33,7 +33,7 @@ async def on_message(message):
     #usr = await client.fetch_user(str(config.get('my_id')))
     #LOG.info(f'{usr.id} {usr.name}#{usr.discriminator}')
 
-    if message.channel.name == 'generall':
+    if not isinstance(message.channel, discord.DMChannel) and message.channel.name == 'generall':
         
         LOG.debug('Got boost message to process')
         res = process_boost(message.content)
@@ -54,7 +54,7 @@ async def shutdown(ctx):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.command(name='gold-add')
-async def gold_add(ctx, mention: str, amount: int, realm_name: str):
+async def gold_add(ctx, mention: str, amount: int, realm_name: str, comment: str):
     if not is_mention(mention):
         await ctx.message.channel.send(f'"{mention}" is not a mention')
         raise BadArgument(f'"{mention}" is not a mention')
@@ -72,7 +72,7 @@ async def gold_add(ctx, mention: str, amount: int, realm_name: str):
         pass
 
     try:
-        db_handling.add_tranaction('add', f'{usr.name}#{usr.discriminator}', 1000, realm_name, 'test transaction')
+        db_handling.add_tranaction('add', f'{ctx.author.name}#{ctx.author.discriminator}', f'{usr.name}#{usr.discriminator}', amount, realm_name, comment)
     except:
         LOG.error(f'Database Error: {traceback.format_exc()}')
         return
@@ -81,20 +81,25 @@ async def gold_add(ctx, mention: str, amount: int, realm_name: str):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.command('balance')
-async def gold(ctx):
+async def balance(ctx):
     LOG.debug(f'balance cmd by {ctx.message.author.id}')
     try:
         balance = db_handling.get_balance(ctx.message.author.id)
     except:
-        LOG.error(f'Balance command error {traceback.format_exc()}')
-    res = balance.splitlines()
-    async with ctx.typing():
-        for line in res:
-            await ctx.message.channel.send(line)
+        LOG.error(f'Balance command error {traceback.format_exc()}') 
+    
+    await ctx.message.channel.send(balance)
 
 @client.command('gold-subtract')
 async def gold_subtract():
     raise NotImplementedError
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command('admin-command')
+@commands.has_any_role('Managment', 'M+ Blaster')
+async def admin_command(ctx):
+    await ctx.message.channel.send('Admin command executed.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -122,8 +127,14 @@ async def on_command_error(ctx, error):
     elif isinstance(error, MissingRequiredArgument):
         await ctx.message.author.send(f'"{ctx.command}" is missing arguments, {error}')
         return
+    elif isinstance(error, MissingAnyRole):
+        await ctx.message.channel.send(f'Insufficient priviledges to execute "{ctx.message.content}". {error}.')
+        return
+    else:
+        await ctx.message.channel.send(f'{ctx.command} failed. Reason: {error}')
 
     LOG.error(f'Command error: {ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
+    
     usr = client.get_user(config.get('my_id'))
     await usr.send(f'{ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
 
