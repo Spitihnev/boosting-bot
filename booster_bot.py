@@ -4,12 +4,16 @@ from discord.ext import commands
 from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument, MissingAnyRole
 import traceback
 import re
+import asyncio
 
 import config
 import db_handling
 import constants
 
-logging.basicConfig(level=logging.INFO)
+QUIT_CALLED = False
+MNG_ROLE_ID = None
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)-23s %(levelname)-8s %(message)s')
 LOG = logging.getLogger(__name__)
 LOG.setLevel(level=logging.DEBUG)
 client = commands.Bot(command_prefix='!')
@@ -18,8 +22,19 @@ client = commands.Bot(command_prefix='!')
 
 @client.event
 async def on_ready():
+    global MNG_ROLE_ID
     LOG.debug('Connected')
-    await client.change_presence(activity=discord.Game(name='Boosting Day \'n Night '))
+    async for guild in client.fetch_guilds():
+        if guild.name == 'bot_testing' or guild.id in config.get('deployed_guilds'):
+            LOG.debug(guild.id)
+            roles = await guild.fetch_roles()
+            for role in roles:
+                if role.name == 'Management':
+                    MNG_ROLE_ID = role.id
+        else:
+            LOG.warn('Unknown guild found!')
+
+    await client.change_presence(activity=discord.Game(name='!help for commands'))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -27,9 +42,12 @@ async def on_ready():
 async def on_message(message):
     #LOG.debug(f'{client.user}')
     #LOG.debug(f'Registered message from {message.author} with content {message.content}')
-    if message.author == client.user or message.author.bot:
+    LOG.debug(f'Quit called: {QUIT_CALLED}')
+    if message.author == client.user or message.author.bot or QUIT_CALLED:
         return
 
+    await client.process_commands(message)
+    return
     #usr = await client.fetch_user(str(config.get('my_id')))
     #LOG.info(f'{usr.id} {usr.name}#{usr.discriminator}')
 
@@ -41,72 +59,110 @@ async def on_message(message):
             await message.channel.send(f'Processed boost: boostee:{res[0]}, advertiser:{res[1]}, run:{res[2]}, price:{res[3]}, boosters:{res[4]}')
         if not res:
             LOG.debug('Boost not processed')
-    await client.process_commands(message)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.command(name='quit')
 async def shutdown(ctx):
+    global QUIT_CALLED
     if ctx.author.id == config.get('my_id'):
-        LOG.debug('Leaving...')
+        await ctx.message.channel.send('Leaving...')
+        QUIT_CALLED = True
+        #to process anything in progress
+        await asyncio.sleep(60)
         await client.logout()
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command(name='gold-add')
-async def gold_add(ctx, mention: str, amount: int, realm_name: str, comment: str):
+@client.command(name='gold')
+@commands.has_role('Management')
+async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str, realm_name: str=None):
     if not is_mention(mention):
-        await ctx.message.channel.send(f'"{mention}" is not a mention')
+        await ctx.message.author.send(f'"{mention}" is not a mention')
         raise BadArgument(f'"{mention}" is not a mention')
 
-    if realm_name not in constants.EU_REALM_NAMES:
-        await ctx.message.channel.send(f'"{realm_name}" is not a known EU realm')
+    if realm_name not in constants.EU_REALM_NAMES and realm_name is not None:
+        await ctx.message.author.send(f'"{realm_name}" is not a known EU realm')
         raise BadArgument(f'"{realm_name}" is not a known EU realm')
+
+    if transaction_type not in db_handling.TRANSACTIONS:
+        raise BadArgument('Unknown transaction type!')
+        await ctx.message.author.send('Unknown transaction type!')
 
     usr = client.get_user(mention2id(mention))
     try:
-        exist_check = db_handling.name2id(f'{usr.name}#{usr.discriminator}')
+        exist_check = db_handling.name2dsc_id(f'{usr.name}#{usr.discriminator}')
     except db_handling.UserNotFoundError:
         db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id)
     except db_handling.UserAlreadyExists:
         pass
 
     try:
-        db_handling.add_tranaction('add', f'{ctx.author.name}#{ctx.author.discriminator}', f'{usr.name}#{usr.discriminator}', amount, realm_name, comment)
+        db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), realm_name, ctx.guild.id, comment)
+    except BadArgument as e:
+        await ctx.message.author.send(e)
+        return
+
     except:
         LOG.error(f'Database Error: {traceback.format_exc()}')
+        await ctx.message.author.send('Critical error occured, contact administrator.')
         return
-    await ctx.message.channel.send(f'Added {amount} to {mention} balance.')
+
+    await ctx.message.channel.send(f'Transaction with type {transaction_type}, amount {gold_str2int(amount)} was added to {mention} balance.')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command(name='list-transactions')
+async def list_transactions(ctx, limit: int=10):
+    if limit < 1:
+        await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
+        raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
+        return
+
+    transactions = db_handling.list_transactions(ctx.message.author.id, limit)
+
+    for t in transactions:
+        await ctx.message.channel.send(t)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@commands.has_role('Management')
+@client.command(name='admin-list-transactions')
+async def list_transactions(ctx, mention, limit: int=10):
+    if limit < 1:
+        await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
+        raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
+        return
+    usr_id = mention2id(mention)
+    transactions = db_handling.list_transactions(usr_id, limit)
+    
+    member_name = ctx.guild.get_member(usr_id).name
+    await ctx.message.channel.send(f'Last {limit} transactions for user: {member_name}')
+
+    for t in transactions:
+        await ctx.message.channel.send(t)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.command('balance')
-async def balance(ctx):
-    LOG.debug(f'balance cmd by {ctx.message.author.id}')
+@commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
+async def balance(ctx, mention=None):
+    extended = ctx.guild.get_role(MNG_ROLE_ID) == ctx.message.author.top_role
+    LOG.debug(f'balance cmd by {ctx.message.author.id} is_admin:{extended} {MNG_ROLE_ID}')
+
+    if extended and mention is not None:
+        user_id = mention2id(mention)
+    else:
+        user_id = ctx.message.author.id
+
     try:
-        balance = db_handling.get_balance(ctx.message.author.id)
+        balance = db_handling.get_balance(user_id, ctx.guild.id)
     except:
-        LOG.error(f'Balance command error {traceback.format_exc()}') 
+        LOG.error(f'Balance command error {traceback.format_exc()}')
+        await client.get_user(config.get('my_id')).send(f'Balance command error {traceback.format_exc()}')
+        return
     
-    await ctx.message.channel.send(balance)
-
-@client.command('gold-subtract')
-async def gold_subtract():
-    raise NotImplementedError
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-@client.command('admin-command')
-@commands.has_any_role('Managment', 'M+ Blaster')
-async def admin_command(ctx):
-    await ctx.message.channel.send('Admin command executed.')
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-@client.event
-async def on_reaction_add(reaction, user):
-    if reaction.message.author == client.user:
-        await reaction.message.channel.send(f'Glad to see your {reaction} to my message {user.name}.')
+    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n'+balance[1])
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -128,12 +184,12 @@ async def on_command_error(ctx, error):
         await ctx.message.author.send(f'"{ctx.command}" is missing arguments, {error}')
         return
     elif isinstance(error, MissingAnyRole):
-        await ctx.message.channel.send(f'Insufficient priviledges to execute "{ctx.message.content}". {error}.')
+        await ctx.message.author.send(f'Insufficient priviledges to execute "{ctx.message.content}". {error}.')
         return
     else:
-        await ctx.message.channel.send(f'{ctx.command} failed. Reason: {error}')
+        await ctx.message.author.send(f'{ctx.command} failed. Reason: {error}')
 
-    LOG.error(f'Command error: {ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
+    LOG.error(f'Command error: {ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}\n{traceback.format_exc()}')
     
     usr = client.get_user(config.get('my_id'))
     await usr.send(f'{ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
@@ -190,5 +246,25 @@ def mention2id(mention):
     return int(mention[3:-1])
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
+
+def gold_str2int(gold_str):
+    gold_str = gold_str.lower()
+    
+    try:
+        int_part = int(gold_str)
+    except ValueError:
+        try:
+            int_part = int(gold_str[:-1])
+            if int_part < 0:
+                raise BadArgument('Negative amounts are not a valid amount.')
+        except:
+            raise BadArgument(f'"{gold_str}" not not a valid gold amount. Accepted formats: <int_value>[mk]')
+
+    if gold_str.endswith('k'):
+        return int_part * 1000
+    elif gold_str.endswith('m'):
+        return int_part * 1e6
+
+    return int(int_part)
 
 client.run(config.get('token'))

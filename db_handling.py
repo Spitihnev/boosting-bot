@@ -8,6 +8,7 @@ import config
 import constants
 
 LOG = logging.getLogger(__name__)
+TRANSACTIONS = ('add', 'deduct', 'payout')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -24,10 +25,10 @@ class UnknownRealmName(Exception):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def get_balance(discord_id):
+def get_balance(discord_id, guild_id):
     ttl = defaultdict(int)
     with _db_connect() as crs:
-        crs.execute('select type, amount, r.name from transactions as t left join realms as r on (r.id = t.realm_id) left join users as u on (t.booster_id = u.id) where u.dsc_id=%s', discord_id)
+        crs.execute('select type, amount, r.name from transactions as t left join realms as r on (r.id = t.realm_id) where booster_id=%s and guild_id=%s', (discord_id, guild_id))
         for t_type, amount, realm_name in crs:
             if t_type in ('deduct', 'payout', 'transfer_from'):
                 ttl[realm_name] -= amount
@@ -35,25 +36,34 @@ def get_balance(discord_id):
                 ttl[realm_name] += amount
 
     if not ttl:
-        return 'Your total balance is: 0'
+        return None, 'Total: 0'
     else:
         res = ''
         for k, v in ttl.items():
             res += '{}: {}\n----------------\n'.format(k, v)
-        res += f'Total: {sum(ttl.values())}'
-        return res
+        ttl_str = f'Total: {sum(ttl.values())}'
+        return res, ttl_str
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def add_tranaction(type, booster_name, transaction_author, amount, realm_name, comment=None):
-    author_id = name2id(transaction_author)
-    booster_id = name2id(booster_name)
+def list_transactions(user_id, limit):
+    res = []
+    with _db_connect() as crs:
+        crs.execute('select type, amount, date_added, comment, name from transactions join users on (dsc_id = author_id) where booster_id=%s order by id desc limit {}'.format(limit), user_id)
+        for type, amount, date_added, comment, name in crs:
+            res.append(f'transaction_type: {type}, amount:{amount}, date_added: {date_added}, comment: "{comment}", transaction_author: {name}')
+
+    return res
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+def add_tranaction(type, booster_id, transaction_author_id, amount, realm_name, guild_id, comment=None):
     realm_id = realm_name2id(realm_name)
     with _db_connect() as crs:
         try:
-            crs.execute('insert into transactions (`type`, `author_id`, `booster_id`, `amount`, `realm_id`, `comment`) values (%s, %s, %s, %s, %s, %s)', (type, author_id, booster_id, amount, realm_id, comment))
+            crs.execute('insert into transactions (`type`, `author_id`, `booster_id`, `amount`, `realm_id`, `comment`, `guild_id`) values (%s, %s, %s, %s, %s, %s, %s)', (type, transaction_author_id, booster_id, amount, realm_id, comment, guild_id))
         except:
-            raise DatabaseError(f'Failed to add transaction with parameters {type} {booster_name} (translated into {booster_id}) {realm_name} (translated into {realm_id}) {amount} {comment}, reason: {traceback.format_exc()}')
+            raise DatabaseError(f'Failed to add transaction with parameters {type} {booster_id} {realm_name} (translated into {realm_id}) {amount} {comment}, reason: {traceback.format_exc()}')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -110,7 +120,7 @@ def add_user(name, discord_id):
     LOG.info(f'adding user {name} with id {discord_id}')
     exist_check = None
     try:
-        exist_check = name2id(name)
+        exist_check = name2dsc_id(name)
     except UserNotFoundError:
         pass
     if exist_check:
@@ -144,22 +154,6 @@ def add_realm(name):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def name2id(name_or_id):
-    with _db_connect() as crs:
-        if isinstance(name_or_id, str):
-            ret = crs.execute('select id from users where name=%s', name_or_id)
-        else:
-            ret = crs.execute('select id from users where dsc_id=%s', name_or_id)
-        if ret == 0:
-            raise UserNotFoundError(f'User {name_or_id} not found!')
-        elif ret > 1:
-            raise DatabaseError(f'More users with the same dsc_id (wtf did you do?)')
-        else:
-            for user_id in crs:
-                return user_id
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
 def name2dsc_id(name):
     with _db_connect() as crs:
         ret = crs.execute('select dsc_id from users where name=%s', name)
@@ -174,6 +168,9 @@ def name2dsc_id(name):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 def realm_name2id(name):
+    if name is None:
+        return None
+
     with _db_connect() as crs:
         ret = crs.execute('select id from realms where name=%s', name)
         if ret == 0:
