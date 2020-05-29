@@ -50,10 +50,13 @@ def list_transactions(user_id, limit):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def list_top_boosters(limit):
+def list_top_boosters(limit, realm_name=None):
     res = []
     with _db_connect() as crs:
-        crs.execute('select sum(amount), booster_id from transactions group by booster_id order by amount desc limit {}'.format(limit))
+        if realm_name is None:
+            crs.execute('select sum(amount), booster_id from transactions group by booster_id order by amount desc limit {}'.format(limit))
+        else:
+            crs.execute('select sum(amount), booster_id from transactions join users on (booster_id = dsc_id) where home_realm=%s group by booster_id order by amount desc limit {}'.format(limit), realm_name)
         for amount, name in crs:
             res.append((amount, name))
 
@@ -122,20 +125,13 @@ def get_realm_balance(realm_name, dsc_id):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def add_user(name, discord_id):
-    LOG.info(f'adding user {name} with id {discord_id}')
-    exist_check = None
-    try:
-        exist_check = name2dsc_id(name)
-    except UserNotFoundError:
-        pass
-    if exist_check:
-        raise UserAlreadyExists(f'User with name {name} already exists')
+def add_user(name, discord_id, home_realm):
+    LOG.info(f'adding user {name} with id {discord_id} {home_realm}')
 
     conn = _db_connect()
     with conn.cursor() as crs:
         try:
-            crs.execute('insert into users (`name`, `dsc_id`) values (%s, %s)', (name, discord_id))
+            crs.execute('insert into users (`name`, `dsc_id`, `home_realm`) values (%s, %s, %s) on duplicate key update home_realm=%s', (name, discord_id, home_realm, home_realm))
         except:
             raise DatabaseError(f'Failed to add new user with name {name}: {traceback.format_exc()}')
         conn.commit()
@@ -165,8 +161,6 @@ def name2dsc_id(name):
         ret = crs.execute('select dsc_id from users where name=%s', name)
         if ret == 0:
             raise UserNotFoundError(f'User {name} not found!')
-        elif ret > 1:
-            raise DatabaseError(f'More users with the same id (wtf did you do?)')
         else:
             for user_dsc_id in crs:
                 return user_dsc_id

@@ -12,7 +12,6 @@ import db_handling
 import constants
 
 QUIT_CALLED = False
-MNG_ROLE_ID = None
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
 handler = handlers.RotatingFileHandler('logs/log', maxBytes=10 * 50 ** 20, backupCount=10)
@@ -28,17 +27,10 @@ client = commands.Bot(command_prefix='!')
 
 @client.event
 async def on_ready():
-    global MNG_ROLE_ID
     LOG.debug('Connected')
     async for guild in client.fetch_guilds():
         if guild.name == 'bot_testing' or guild.id in config.get('deployed_guilds'):
             LOG.debug(guild.id)
-            roles = await guild.fetch_roles()
-            for role in roles:
-                if role.name == 'Management':
-                    MNG_ROLE_ID = role.id
-        else:
-            LOG.warn('Unknown guild found!')
 
     await client.change_presence(activity=discord.Game(name='!help for commands'))
 
@@ -54,19 +46,19 @@ async def on_message(message):
         return
 
     await client.process_commands(message)
-    return
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
+@commands.is_owner()
 @client.command(name='quit')
 async def shutdown(ctx):
     global QUIT_CALLED
-    if ctx.author.id == config.get('my_id'):
-        await ctx.message.channel.send('Leaving...')
-        QUIT_CALLED = True
-        #to process anything in progress
-        await asyncio.sleep(60)
-        await client.logout()
+
+    await ctx.message.channel.send('Leaving...')
+    QUIT_CALLED = True
+    #to process anything in progress
+    await asyncio.sleep(60)
+    await client.logout()
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -81,11 +73,13 @@ async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment
         raise BadArgument('Unknown transaction type!')
         await ctx.message.author.send('Unknown transaction type!')
 
+    nick = ctx.guild.get_member(mention2id(mention)).nick
+
     usr = client.get_user(mention2id(mention))
     try:
         exist_check = db_handling.name2dsc_id(f'{usr.name}#{usr.discriminator}')
     except db_handling.UserNotFoundError:
-        db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id)
+        db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id, parse_nick2realm(nick))
     except db_handling.UserAlreadyExists:
         pass
 
@@ -123,7 +117,7 @@ async def list_transactions(ctx, limit: int=10):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @commands.has_role('Management')
-@client.command(name='top-boosters')
+@client.command(name='top')
 async def list_transactions(ctx, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!.')
@@ -141,7 +135,30 @@ async def list_transactions(ctx, limit: int=10):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @commands.has_role('Management')
-@client.command(name='admin-list-transactions')
+@client.command(name='realm-top')
+async def list_transactions(ctx, realm_name: str, limit: int=10):
+    if limit < 1:
+        await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!')
+        raise BadArgument(f'{limit} is an invalid value to limit number of transactions!')
+        return
+
+    if realm_name not in constants.EU_REALM_NAMES:
+        await ctx.message.author.send(f'{realm_name} is not a known EU realm!')
+        raise BadArgument(f'{realm_name} is not a known EU realm!')
+        return
+
+    top_ppl = db_handling.list_top_boosters(limit, realm_name)
+
+    res_str = f'Current top boosters for realm {realm_name}:\n'
+    for idx, data in enumerate(top_ppl): 
+        res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+
+    await ctx.message.channel.send(res_str)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@commands.has_role('Management')
+@client.command(name='alist-transactions')
 async def admin_list_transactions(ctx, mention, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
@@ -163,13 +180,7 @@ async def admin_list_transactions(ctx, mention, limit: int=10):
 @client.command('balance')
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def balance(ctx, mention=None):
-    extended = ctx.guild.get_role(MNG_ROLE_ID) == ctx.message.author.top_role
-    LOG.debug(f'balance cmd by {ctx.message.author.id} is_admin:{extended} {MNG_ROLE_ID}')
-
-    if extended and mention is not None:
-        user_id = mention2id(mention)
-    else:
-        user_id = ctx.message.author.id
+    user_id = ctx.message.author.id
 
     try:
         balance = db_handling.get_balance(user_id, ctx.guild.id)
@@ -179,6 +190,37 @@ async def balance(ctx, mention=None):
         return
     
     await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command('abalance')
+@commands.has_role('Management')
+async def admin_balance(ctx, mention):
+    user_id = mention2id(mention)
+
+    try:
+        balance = db_handling.get_balance(user_id, ctx.guild.id)
+    except:
+        LOG.error(f'Balance command error {traceback.format_exc()}')
+        await client.get_user(config.get('my_id')).send(f'Balance command error {traceback.format_exc()}')
+        return
+    
+    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance)
+
+#-------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.event
+async def on_member_update(before, after):
+    if before.nick != after.nick and after.nick is not None:
+        try:
+            realm_name = parse_nick2realm(after.nick)
+        except BadArgument as e:
+            await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm>. {e}')
+        else:
+            db_handling.add_user(after.name, after.id, parse_nick2realm(after.nick))
+
+    elif after.nick is None:
+        await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm>.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -263,6 +305,18 @@ def mention2id(mention):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
+def parse_nick2realm(nick):
+    try:
+        realm_name = nick.split('-')[1].strip()
+    except:
+        raise BadArgument(f'{nick} is not in correct format.')
+    if realm_name not in constants.EU_REALM_NAMES:
+        raise BadArgument(f'{realm_name} is not a known EU realm name.')
+
+    return realm_name
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 def gold_str2int(gold_str):
     gold_str = gold_str.lower()
     
@@ -280,5 +334,7 @@ def gold_str2int(gold_str):
         return int_part * 1e6
 
     return int(int_part)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 client.run(config.get('token'))
