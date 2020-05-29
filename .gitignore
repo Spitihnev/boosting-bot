@@ -3,3 +3,4 @@
 *.pyproj
 config.json
 __pycache__/*
+logs/*

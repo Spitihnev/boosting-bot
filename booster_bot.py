@@ -1,4 +1,5 @@
 import logging
+from logging import handlers
 import discord
 from discord.ext import commands
 from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument, MissingAnyRole
@@ -13,9 +14,14 @@ import constants
 QUIT_CALLED = False
 MNG_ROLE_ID = None
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)-23s %(levelname)-8s %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
+handler = handlers.RotatingFileHandler('logs/log', maxBytes=10 * 50 ** 20, backupCount=10)
+formatter = logging.Formatter('%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
+handler.setFormatter(formatter)
+logging.getLogger('').addHandler(handler)
+logging.getLogger('discord').setLevel(logging.INFO)
+logging.getLogger('websockets').setLevel(logging.INFO)
 LOG = logging.getLogger(__name__)
-LOG.setLevel(level=logging.DEBUG)
 client = commands.Bot(command_prefix='!')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
@@ -42,23 +48,13 @@ async def on_ready():
 async def on_message(message):
     #LOG.debug(f'{client.user}')
     #LOG.debug(f'Registered message from {message.author} with content {message.content}')
-    LOG.debug(f'Quit called: {QUIT_CALLED}')
-    if message.author == client.user or message.author.bot or QUIT_CALLED:
+    LOG.debug(config.get('cmd_channels'))
+    if message.author == client.user or message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels'):
+        LOG.debug(f'skipping processing of msg: {message.author} {QUIT_CALLED} {message.channel}')
         return
 
     await client.process_commands(message)
     return
-    #usr = await client.fetch_user(str(config.get('my_id')))
-    #LOG.info(f'{usr.id} {usr.name}#{usr.discriminator}')
-
-    if not isinstance(message.channel, discord.DMChannel) and message.channel.name == 'generall':
-        
-        LOG.debug('Got boost message to process')
-        res = process_boost(message.content)
-        if res:
-            await message.channel.send(f'Processed boost: boostee:{res[0]}, advertiser:{res[1]}, run:{res[2]}, price:{res[3]}, boosters:{res[4]}')
-        if not res:
-            LOG.debug('Boost not processed')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -127,8 +123,26 @@ async def list_transactions(ctx, limit: int=10):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @commands.has_role('Management')
+@client.command(name='top-boosters')
+async def list_transactions(ctx, limit: int=10):
+    if limit < 1:
+        await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!.')
+        raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
+        return
+
+    top_ppl = db_handling.list_top_boosters(limit)
+
+    res_str = 'Current top boosters:\n'
+    for idx, data in enumerate(top_ppl):  
+        res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+
+    await ctx.message.channel.send(res_str)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@commands.has_role('Management')
 @client.command(name='admin-list-transactions')
-async def list_transactions(ctx, mention, limit: int=10):
+async def admin_list_transactions(ctx, mention, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
@@ -136,8 +150,7 @@ async def list_transactions(ctx, mention, limit: int=10):
     usr_id = mention2id(mention)
     transactions = db_handling.list_transactions(usr_id, limit)
     
-    member_name = ctx.guild.get_member(usr_id).name
-    await ctx.message.channel.send(f'Last {limit} transactions for user: {member_name}')
+    await ctx.message.channel.send(f'Last {limit} transactions for user: {ctx.guild.get_member(usr_id).name}')
 
     for t in transactions:
         await ctx.message.channel.send(t)
@@ -162,7 +175,7 @@ async def balance(ctx, mention=None):
         await client.get_user(config.get('my_id')).send(f'Balance command error {traceback.format_exc()}')
         return
     
-    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n'+balance[1])
+    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance[1])
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 

@@ -28,12 +28,9 @@ class UnknownRealmName(Exception):
 def get_balance(discord_id, guild_id):
     ttl = defaultdict(int)
     with _db_connect() as crs:
-        crs.execute('select type, amount, r.name from transactions as t left join realms as r on (r.id = t.realm_id) where booster_id=%s and guild_id=%s', (discord_id, guild_id))
-        for t_type, amount, realm_name in crs:
-            if t_type in ('deduct', 'payout', 'transfer_from'):
-                ttl[realm_name] -= amount
-            elif t_type in ('add', 'transfer_to'):
-                ttl[realm_name] += amount
+        crs.execute('select amount, r.name from transactions as t left join realms as r on (r.id = t.realm_id) where booster_id=%s and guild_id=%s', (discord_id, guild_id))
+        for amount, realm_name in crs:
+            ttl[realm_name] += amount
 
     if not ttl:
         return None, 'Total: 0'
@@ -55,6 +52,17 @@ def list_transactions(user_id, limit):
 
     return res
 
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+def list_top_boosters(limit):
+    res = []
+    with _db_connect() as crs:
+        crs.execute('select sum(amount), booster_id from transactions group by booster_id order by amount desc limit {}'.format(limit))
+        for amount, name in crs:
+            res.append((amount, name))
+
+    return res
+    
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 def add_tranaction(type, booster_id, transaction_author_id, amount, realm_name, guild_id, comment=None):
