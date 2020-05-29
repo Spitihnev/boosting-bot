@@ -97,7 +97,6 @@ async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment
     except db_handling.UserAlreadyExists:
         pass
 
-    await asyncio.sleep(5)
     try:
         db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), realm_name, ctx.guild.id, comment)
     except BadArgument as e:
