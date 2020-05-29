@@ -97,6 +97,7 @@ async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment
     except db_handling.UserAlreadyExists:
         pass
 
+    await asyncio.sleep(5)
     try:
         db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), realm_name, ctx.guild.id, comment)
     except BadArgument as e:
@@ -108,7 +109,7 @@ async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment
         await ctx.message.author.send('Critical error occured, contact administrator.')
         return
 
-    await ctx.message.channel.send(f'Transaction with type {transaction_type}, amount {gold_str2int(amount)} was added to {mention} balance.')
+    await ctx.message.channel.send(f'Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was added to {mention} balance.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -250,19 +251,17 @@ def mention2id(mention):
 def gold_str2int(gold_str):
     gold_str = gold_str.lower()
     
-    try:
-        int_part = int(gold_str)
-    except ValueError:
-        try:
-            int_part = int(gold_str[:-1])
-            if int_part < 0:
-                raise BadArgument('Negative amounts are not a valid amount.')
-        except:
-            raise BadArgument(f'"{gold_str}" not not a valid gold amount. Accepted formats: <int_value>[mk]')
+    m = re.match('^([0-9]+)([kKmM]?)$', gold_str)
+    if not m:
+        raise BadArgument(f'"{gold_str}" not not a valid gold amount. Accepted formats: <int_value>[mk]')
 
-    if gold_str.endswith('k'):
+    int_part = int(m.group(1))
+    if int(m.group(1)) < 1:
+        raise BadArgument('Only positive amounts are accepted.')
+    
+    if m.group(2) == 'k':
         return int_part * 1000
-    elif gold_str.endswith('m'):
+    elif m.group(2) == 'm':
         return int_part * 1e6
 
     return int(int_part)
