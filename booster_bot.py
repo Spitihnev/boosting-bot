@@ -72,14 +72,10 @@ async def shutdown(ctx):
 
 @client.command(name='gold')
 @commands.has_role('Management')
-async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str, realm_name: str=None):
+async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str=None):
     if not is_mention(mention):
         await ctx.message.author.send(f'"{mention}" is not a mention')
         raise BadArgument(f'"{mention}" is not a mention')
-
-    if realm_name not in constants.EU_REALM_NAMES and realm_name is not None:
-        await ctx.message.author.send(f'"{realm_name}" is not a known EU realm')
-        raise BadArgument(f'"{realm_name}" is not a known EU realm')
 
     if transaction_type not in db_handling.TRANSACTIONS:
         raise BadArgument('Unknown transaction type!')
@@ -94,7 +90,7 @@ async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment
         pass
 
     try:
-        db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), realm_name, ctx.guild.id, comment)
+        db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
     except BadArgument as e:
         await ctx.message.author.send(e)
         return
@@ -108,6 +104,7 @@ async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
+@commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 @client.command(name='list-transactions')
 async def list_transactions(ctx, limit: int=10):
     if limit < 1:
@@ -117,8 +114,11 @@ async def list_transactions(ctx, limit: int=10):
 
     transactions = db_handling.list_transactions(ctx.message.author.id, limit)
 
+    transactions_string = ''
     for t in transactions:
-        await ctx.message.channel.send(t)
+        transactions_string += t+'\n'
+
+    await ctx.message.channel.send(transactions_string)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -133,7 +133,7 @@ async def list_transactions(ctx, limit: int=10):
     top_ppl = db_handling.list_top_boosters(limit)
 
     res_str = 'Current top boosters:\n'
-    for idx, data in enumerate(top_ppl):  
+    for idx, data in enumerate(top_ppl): 
         res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
 
     await ctx.message.channel.send(res_str)
@@ -152,8 +152,11 @@ async def admin_list_transactions(ctx, mention, limit: int=10):
     
     await ctx.message.channel.send(f'Last {limit} transactions for user: {ctx.guild.get_member(usr_id).name}')
 
+    transactions_string = ''
     for t in transactions:
-        await ctx.message.channel.send(t)
+        transactions_string += t+'\n'
+
+    await ctx.message.channel.send(transactions_string)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -175,7 +178,7 @@ async def balance(ctx, mention=None):
         await client.get_user(config.get('my_id')).send(f'Balance command error {traceback.format_exc()}')
         return
     
-    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance[1])
+    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 

@@ -26,20 +26,16 @@ class UnknownRealmName(Exception):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 def get_balance(discord_id, guild_id):
-    ttl = defaultdict(int)
+    ttl = 0
     with _db_connect() as crs:
-        crs.execute('select amount, r.name from transactions as t left join realms as r on (r.id = t.realm_id) where booster_id=%s and guild_id=%s', (discord_id, guild_id))
-        for amount, realm_name in crs:
-            ttl[realm_name] += amount
+        crs.execute('select amount from transactions as t where booster_id=%s and guild_id=%s', (discord_id, guild_id))
+        for amount, in crs:
+            ttl += amount
 
     if not ttl:
-        return None, 'Total: 0'
+        return 'Total: 0'
     else:
-        res = ''
-        for k, v in ttl.items():
-            res += '{}: {}\n----------------\n'.format(k, v)
-        ttl_str = f'Total: {sum(ttl.values())}'
-        return res, ttl_str
+        return f'Total: {ttl}'
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -65,13 +61,15 @@ def list_top_boosters(limit):
     
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def add_tranaction(type, booster_id, transaction_author_id, amount, realm_name, guild_id, comment=None):
-    realm_id = realm_name2id(realm_name)
+def add_tranaction(type, booster_id, transaction_author_id, amount, guild_id, comment=None):
+    if type in ('deduct', 'payout'):
+        amount  = -amount
+
     with _db_connect() as crs:
         try:
-            crs.execute('insert into transactions (`type`, `author_id`, `booster_id`, `amount`, `realm_id`, `comment`, `guild_id`) values (%s, %s, %s, %s, %s, %s, %s)', (type, transaction_author_id, booster_id, amount, realm_id, comment, guild_id))
+            crs.execute('insert into transactions (`type`, `author_id`, `booster_id`, `amount`, `comment`, `guild_id`) values (%s, %s, %s, %s, %s, %s)', (type, transaction_author_id, booster_id, amount, comment, guild_id))
         except:
-            raise DatabaseError(f'Failed to add transaction with parameters {type} {booster_id} {realm_name} (translated into {realm_id}) {amount} {comment}, reason: {traceback.format_exc()}')
+            raise DatabaseError(f'Failed to add transaction with parameters {type} {booster_id} {amount} {comment}, reason: {traceback.format_exc()}')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
