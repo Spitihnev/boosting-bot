@@ -6,6 +6,8 @@ from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument
 import traceback
 import re
 import asyncio
+from difflib import SequenceMatcher
+import operator
 
 import config
 import db_handling
@@ -14,7 +16,7 @@ import constants
 QUIT_CALLED = False
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
-handler = handlers.RotatingFileHandler('logs/log', maxBytes=10 * 50 ** 20, backupCount=10)
+handler = handlers.RotatingFileHandler('logs/log', maxBytes=10 * 50 ** 20, backupCount=10, encoding='utf-8')
 formatter = logging.Formatter('%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
 handler.setFormatter(formatter)
 logging.getLogger('').addHandler(handler)
@@ -41,7 +43,7 @@ async def on_message(message):
     #LOG.debug(f'{client.user}')
     #LOG.debug(f'Registered message from {message.author} with content {message.content}')
     LOG.debug(config.get('cmd_channels'))
-    if message.author == client.user or message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels'):
+    if message.author == client.user or message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels') or isinstance(message.channel, discord.channel.DMChannel):
         LOG.debug(f'skipping processing of msg: {message.author} {QUIT_CALLED} {message.channel}')
         return
 
@@ -64,37 +66,69 @@ async def shutdown(ctx):
 
 @client.command(name='gold')
 @commands.has_role('Management')
-async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str=None):
-    if not is_mention(mention):
-        await ctx.message.author.send(f'"{mention}" is not a mention')
-        raise BadArgument(f'"{mention}" is not a mention')
+#async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str=None):
+async def gold_add(ctx, *args):
+    LOG.debug(args)
+    mentions = []
+    last_mention_idx = -1
+    for idx, arg in enumerate(args):
+        if is_mention(arg):
+            mentions.append(arg)
+            #check if mentions are continuus
+            if last_mention_idx >= 0 and (last_mention_idx - idx) > 1:
+                ctx.message.author('Mentions are expected to be in a row.')
+                raise BadArgument('Mentions are expected to be in a row.')
+                return
+
+            last_mention_idx = idx
+
+    try:
+        transaction_type = args[0]
+    except:
+        raise BadArgument(f'Transaction type was not found in arguments: {args}')
+        await ctx.message.author.send(f'Transaction type was not found in arguments: {args}')
+        return
 
     if transaction_type not in db_handling.TRANSACTIONS:
         raise BadArgument('Unknown transaction type!')
         await ctx.message.author.send('Unknown transaction type!')
-
-    nick = ctx.guild.get_member(mention2id(mention)).nick
-
-    usr = client.get_user(mention2id(mention))
-    try:
-        exist_check = db_handling.name2dsc_id(f'{usr.name}#{usr.discriminator}')
-    except db_handling.UserNotFoundError:
-        db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id, parse_nick2realm(nick))
-    except db_handling.UserAlreadyExists:
-        pass
-
-    try:
-        db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
-    except BadArgument as e:
-        await ctx.message.author.send(e)
         return
 
+    try:
+        amount = args[last_mention_idx+1]
     except:
-        LOG.error(f'Database Error: {traceback.format_exc()}')
-        await ctx.message.author.send('Critical error occured, contact administrator.')
+        ctx.message.author(f'Gold amount to process was not found in arguments {args}.')
+        raise BadArgument(f'Gold amount to process was not found in arguments {args}.')
         return
 
-    await ctx.message.channel.send(f'Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was added to {mention} balance.')
+    try:
+        comment = args[last_mention_idx + 2]
+    except IndexError:
+        comment = None
+
+    for mention in mentions:
+        nick = ctx.guild.get_member(mention2id(mention)).nick
+
+        usr = client.get_user(mention2id(mention))
+        try:
+            exist_check = db_handling.name2dsc_id(f'{usr.name}#{usr.discriminator}')
+        except db_handling.UserNotFoundError:
+            db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id, parse_nick2realm(nick))
+        except db_handling.UserAlreadyExists:
+            pass
+
+        try:
+            db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
+        except BadArgument as e:
+            await ctx.message.author.send(e)
+            return
+
+        except:
+            LOG.error(f'Database Error: {traceback.format_exc()}')
+            await ctx.message.author.send('Critical error occured, contact administrator.')
+            return
+
+        await ctx.message.channel.send(f'Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was added to {mention} balance.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -142,7 +176,7 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!')
         return
 
-    if realm_name not in constants.EU_REALM_NAMES:
+    if constants.is_valid_realm(realm_name):
         await ctx.message.author.send(f'{realm_name} is not a known EU realm!')
         raise BadArgument(f'{realm_name} is not a known EU realm!')
         return
@@ -211,16 +245,22 @@ async def admin_balance(ctx, mention):
 
 @client.event
 async def on_member_update(before, after):
+    if len(after.roles) == 1:
+        LOG.debug(f'{after} is a buyer')
+        return
+
     if before.nick != after.nick and after.nick is not None:
         try:
             realm_name = parse_nick2realm(after.nick)
         except BadArgument as e:
-            await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm>. {e}')
+            LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
+            await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
         else:
             db_handling.add_user(after.name, after.id, parse_nick2realm(after.nick))
 
-    elif after.nick is None:
-        await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm>.')
+    elif after.nick is None and before.nick is not None:
+        LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>.')
+        await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -309,11 +349,9 @@ def parse_nick2realm(nick):
     try:
         realm_name = nick.split('-')[1].strip()
     except:
-        raise BadArgument(f'{nick} is not in correct format.')
-    if realm_name not in constants.EU_REALM_NAMES:
-        raise BadArgument(f'{realm_name} is not a known EU realm name.')
-
-    return realm_name
+        raise BadArgument(f'{nick} is not in correct format, please use <character_name>-<realm_name>.')
+    if constants.is_valid_realm(realm_name):
+        return realm_name
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
