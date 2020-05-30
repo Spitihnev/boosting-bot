@@ -2,6 +2,8 @@ import operator
 from difflib import SequenceMatcher
 from discord.ext.commands.errors import BadArgument
 
+import db_handling
+
 EU_REALM_NAMES = ("Aegwynn", "Aerie Peak", "Agamaggan", "Aggra (Português)", "Aggramar", "Ahn'Qiraj", "Al'Akir", "Alexstrasza", "Alleria", "Alonsus", "Aman'Thul",
 "Ambossar", "Anachronos", "Anetheron", "Antonidas", "Anub'arak", "Arak-arahm", "Arathi", "Arathor", "Archimonde", "Area 52", "Argent Dawn", "Arthas",
 "Arygos", "Ashenvale", "Aszune", "Auchindoun", "Azjol-Nerub", "Azshara", "Azuregos", "Azuremyst", "Baelgun", "Balnazzar", "Blackhand", "Blackmoore",
@@ -27,9 +29,11 @@ EU_REALM_NAMES = ("Aegwynn", "Aerie Peak", "Agamaggan", "Aggra (Português)", "A
 "Twisting Nether", "Tyrande", "Uldaman", "Ulduar", "Uldum", "Un'Goro", "Varimathras", "Vashj", "Vek'lor", "Vek'nilash", "Vol'jin", "Wildhammer", "Wrathbringer", "Xavius",
 "Ysera", "Ysondre", "Zenedar", "Zirkel des Cenarius", "Zul'jin", "Zuluhed")
 
-def is_valid_realm(realm_name):
+def is_valid_realm(realm_name, check_aliases=False):
     if realm_name in EU_REALM_NAMES:
-        return True
+        return realm_name
+    elif check_aliases:
+        return is_valid_realm(db_handling.alias2realm(realm_name))
     else:
         similar = {valid_realm_name: SequenceMatcher(None, realm_name, valid_realm_name).quick_ratio() for valid_realm_name in EU_REALM_NAMES}
         most_similar = max(similar.items(), key=operator.itemgetter(1))[0]

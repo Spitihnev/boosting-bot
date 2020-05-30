@@ -51,6 +51,8 @@ def list_transactions(user_id, limit):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 def list_top_boosters(limit, realm_name=None):
+    LOG.info(f'Listing top boosters for {realm_name}')
+
     res = []
     with _db_connect() as crs:
         if realm_name is None:
@@ -125,6 +127,15 @@ def get_realm_balance(realm_name, dsc_id):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
+def alias2realm(alias):
+    LOG.info(f'Getting alias for {alias}')
+
+    with _db_connect() as crs:
+        crs.execute('select realm_name from aliases where alias=%s', alias)
+        return crs.fetchone()[0]
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 def add_user(name, discord_id, home_realm):
     LOG.info(f'adding user {name} with id {discord_id} {home_realm}')
 
@@ -137,6 +148,29 @@ def add_user(name, discord_id, home_realm):
         conn.commit()
         crs.execute('select * from users where dsc_id=%s', discord_id)
         return crs.fetchone()
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+def add_alias(realm_name, alias, update=False):
+    LOG.info(f'adding alias {realm_name} as {alias}')
+
+    conn = _db_connect()
+    with conn as crs:
+        if not update:
+            try:
+                crs.execute('insert into aliases (`realm_name`, `alias`) values(%s, %s)', (realm_name, alias))
+                conn.commit()
+                return True
+            except pymysql.IntegrityError as e:
+                raise DatabaseError(e)
+        else:
+            try:
+                crs.execute('insert into aliases (`realm_name`, `alias`) values(%s, %s) on duplicate key update alias=%s', (realm_name, alias, alias))
+                conn.commit()
+                return True
+            except Exception as e:
+                LOG.error(f'{e}, {traceback.format_exc()}')
+                raise DatabaseError('Critical error occured, contact administrator.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 

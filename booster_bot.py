@@ -41,7 +41,10 @@ async def on_message(message):
     #LOG.debug(f'{client.user}')
     #LOG.debug(f'Registered message from {message.author} with content {message.content}')
     LOG.debug(config.get('cmd_channels'))
-    if message.author == client.user or message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels') or isinstance(message.channel, discord.channel.DMChannel):
+    if isinstance(message.channel, discord.channel.DMChannel):
+        return
+
+    if message.author == client.user or message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels'):
         LOG.debug(f'skipping processing of msg: {message.author} {QUIT_CALLED} {message.channel}')
         return
 
@@ -49,8 +52,8 @@ async def on_message(message):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@commands.is_owner()
 @client.command(name='quit')
+@commands.is_owner()
 async def shutdown(ctx):
     global QUIT_CALLED
 
@@ -73,29 +76,28 @@ async def gold_add(ctx, *args):
         if is_mention(arg):
             mentions.append(arg)
             #check if mentions are continuus
-            if last_mention_idx >= 0 and (last_mention_idx - idx) > 1:
-                ctx.message.author('Mentions are expected to be in a row.')
+            if last_mention_idx >= 0 and (idx - last_mention_idx) > 1:
                 raise BadArgument('Mentions are expected to be in a row.')
                 return
 
+            LOG.debug(last_mention_idx)
             last_mention_idx = idx
+
+    LOG.debug('parsed mentions')
 
     try:
         transaction_type = args[0]
     except:
         raise BadArgument(f'Transaction type was not found in arguments: {args}')
-        await ctx.message.author.send(f'Transaction type was not found in arguments: {args}')
         return
 
     if transaction_type not in db_handling.TRANSACTIONS:
         raise BadArgument('Unknown transaction type!')
-        await ctx.message.author.send('Unknown transaction type!')
         return
 
     try:
         amount = args[last_mention_idx+1]
     except:
-        ctx.message.author(f'Gold amount to process was not found in arguments {args}.')
         raise BadArgument(f'Gold amount to process was not found in arguments {args}.')
         return
 
@@ -104,16 +106,17 @@ async def gold_add(ctx, *args):
     except IndexError:
         comment = None
 
+    if len(args) > last_mention_idx + 2:
+        raise BadArgument(f'Got too many arguments: {args}.')
+
     for mention in mentions:
         nick = ctx.guild.get_member(mention2id(mention)).nick
 
         usr = client.get_user(mention2id(mention))
         try:
-            exist_check = db_handling.name2dsc_id(f'{usr.name}#{usr.discriminator}')
-        except db_handling.UserNotFoundError:
             db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id, parse_nick2realm(nick))
-        except db_handling.UserAlreadyExists:
-            pass
+        except db_handling.DatabaseError:
+            return
 
         try:
             db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
@@ -126,12 +129,12 @@ async def gold_add(ctx, *args):
             await ctx.message.author.send('Critical error occured, contact administrator.')
             return
 
-        await ctx.message.channel.send(f'Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was added to {mention} balance.')
+        await ctx.message.channel.send(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was processed.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 @client.command(name='list-transactions')
+@commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
@@ -148,8 +151,8 @@ async def list_transactions(ctx, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@commands.has_role('Management')
 @client.command(name='top')
+@commands.has_role('Management')
 async def list_transactions(ctx, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!.')
@@ -166,15 +169,19 @@ async def list_transactions(ctx, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@commands.has_role('Management')
 @client.command(name='realm-top')
+@commands.has_role('Management')
 async def list_transactions(ctx, realm_name: str, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!')
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!')
         return
 
-    if constants.is_valid_realm(realm_name):
+    try:
+        LOG.debug(realm_name)
+        realm_name = constants.is_valid_realm(realm_name, True)
+        LOG.debug(realm_name)
+    except:
         await ctx.message.author.send(f'{realm_name} is not a known EU realm!')
         raise BadArgument(f'{realm_name} is not a known EU realm!')
         return
@@ -189,8 +196,8 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@commands.has_role('Management')
 @client.command(name='alist-transactions')
+@commands.has_role('Management')
 async def admin_list_transactions(ctx, mention, limit: int=10):
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
@@ -240,6 +247,26 @@ async def admin_balance(ctx, mention):
     await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance)
 
 #-------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command('alias')
+@commands.has_role('Management')
+async def alias(ctx, alias, realm_name):
+    realm_name = constants.is_valid_realm(realm_name)
+    try:
+        if db_handling.add_alias(realm_name, alias):
+            await ctx.message.channel.send(f'Added alias "{alias}"="{realm_name}"')
+    except db_handling.DatabaseError:
+
+        await ctx.message.channel.send(f'"{alias}" already exists overwrite[y/n]?')
+        msg = await client.wait_for('message', check=_msg_author_check(ctx.message.author), timeout=15)
+
+        if msg.content not in ('y', 'n') or msg.content == 'n':
+            return
+        else:
+            if db_handling.add_alias(realm_name, alias, update=True):
+                await ctx.message.channel.send(f'Overwritten alias "{alias}"="{realm_name}"')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.event
 async def on_member_update(before, after):
@@ -347,9 +374,16 @@ def parse_nick2realm(nick):
     try:
         realm_name = nick.split('-')[1].strip()
     except:
-        raise BadArgument(f'{nick} is not in correct format, please use <character_name>-<realm_name>.')
-    if constants.is_valid_realm(realm_name):
-        return realm_name
+        raise BadArgument(f'Nick "{nick}" is not in correct format, please use <character_name>-<realm_name>.')
+    realm_name = constants.is_valid_realm(realm_name, True)
+    return realm_name
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+def _msg_author_check(author):
+    def inner_check(msg):
+        return msg.author == author
+    return inner_check
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
