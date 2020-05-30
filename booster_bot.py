@@ -6,8 +6,6 @@ from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument
 import traceback
 import re
 import asyncio
-from difflib import SequenceMatcher
-import operator
 
 import config
 import db_handling
