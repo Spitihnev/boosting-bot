@@ -151,6 +151,26 @@ async def list_transactions(ctx, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
+@client.command(name='alist-transactions')
+@commands.has_role('Management')
+async def admin_list_transactions(ctx, mention, limit: int=10):
+    if limit < 1:
+        await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
+        raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
+        return
+    usr_id = mention2id(mention)
+    transactions = db_handling.list_transactions(usr_id, limit)
+
+    await ctx.message.channel.send(f'Last {limit} transactions for user: {ctx.guild.get_member(usr_id).name}')
+
+    transactions_string = ''
+    for t in transactions:
+        transactions_string += t+'\n'
+
+    await ctx.message.channel.send(transactions_string)
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 @client.command(name='top')
 @commands.has_role('Management')
 async def list_transactions(ctx, limit: int=10):
@@ -193,26 +213,6 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
         res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
 
     await ctx.message.channel.send(res_str)
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-@client.command(name='alist-transactions')
-@commands.has_role('Management')
-async def admin_list_transactions(ctx, mention, limit: int=10):
-    if limit < 1:
-        await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
-        raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
-        return
-    usr_id = mention2id(mention)
-    transactions = db_handling.list_transactions(usr_id, limit)
-    
-    await ctx.message.channel.send(f'Last {limit} transactions for user: {ctx.guild.get_member(usr_id).name}')
-
-    transactions_string = ''
-    for t in transactions:
-        transactions_string += t+'\n'
-
-    await ctx.message.channel.send(transactions_string)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -281,7 +281,7 @@ async def on_member_update(before, after):
             LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
             await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
         else:
-            db_handling.add_user(after.name, after.id, parse_nick2realm(after.nick))
+            db_handling.add_user(f'{client.get_user(after.id).name}#{client.get_user(after.id).discriminator}', after.id, parse_nick2realm(after.nick))
 
     elif after.nick is None and before.nick is not None:
         LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>.')
