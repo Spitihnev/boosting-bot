@@ -30,6 +30,8 @@ EU_REALM_NAMES = ("Aegwynn", "Aerie Peak", "Agamaggan", "Aggra (Português)", "A
 "Ysera", "Ysondre", "Zenedar", "Zirkel des Cenarius", "Zul'jin", "Zuluhed")
 
 def is_valid_realm(realm_name, check_aliases=False):
+    if realm_name is None:
+        return
     if realm_name in EU_REALM_NAMES:
         return realm_name
     elif check_aliases:

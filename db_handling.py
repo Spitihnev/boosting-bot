@@ -131,8 +131,11 @@ def alias2realm(alias):
     LOG.info(f'Getting alias for {alias}')
 
     with _db_connect() as crs:
-        crs.execute('select realm_name from aliases where alias=%s', alias)
-        return crs.fetchone()[0]
+        ret = crs.execute('select realm_name from aliases where alias=%s', alias)
+        if ret == 0:
+            return alias
+        else:
+            return crs.fetchone()[0]
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
