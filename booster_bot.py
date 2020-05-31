@@ -69,13 +69,14 @@ async def shutdown(ctx):
 @commands.has_role('Management')
 #async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str=None):
 async def gold_add(ctx, *args):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     LOG.debug(args)
     mentions = []
     last_mention_idx = -1
     for idx, arg in enumerate(args):
         if is_mention(arg):
             mentions.append(arg)
-            #check if mentions are continuus
+            #check if mentions are continuous
             if last_mention_idx >= 0 and (idx - last_mention_idx) > 1:
                 raise BadArgument('Mentions are expected to be in a row.')
                 return
@@ -143,6 +144,7 @@ async def gold_add(ctx, *args):
 @client.command(name='list-transactions')
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, limit: int=10):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
@@ -161,6 +163,7 @@ async def list_transactions(ctx, limit: int=10):
 @client.command(name='alist-transactions')
 @commands.has_role('Management')
 async def admin_list_transactions(ctx, mention, limit: int=10):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
@@ -181,6 +184,7 @@ async def admin_list_transactions(ctx, mention, limit: int=10):
 @client.command(name='top')
 @commands.has_role('Management')
 async def list_transactions(ctx, limit: int=10):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!.')
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
@@ -199,6 +203,7 @@ async def list_transactions(ctx, limit: int=10):
 @client.command(name='realm-top')
 @commands.has_role('Management')
 async def list_transactions(ctx, realm_name: str, limit: int=10):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if limit < 1:
         await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!')
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!')
@@ -226,6 +231,7 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
 @client.command('balance')
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def balance(ctx, mention=None):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     user_id = ctx.message.author.id
 
     try:
@@ -242,6 +248,7 @@ async def balance(ctx, mention=None):
 @client.command('abalance')
 @commands.has_role('Management')
 async def admin_balance(ctx, mention):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     user_id = mention2id(mention)
 
     try:
@@ -258,6 +265,7 @@ async def admin_balance(ctx, mention):
 @client.command('alias')
 @commands.has_role('Management')
 async def alias(ctx, alias, realm_name):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     realm_name = constants.is_valid_realm(realm_name)
     try:
         if db_handling.add_alias(realm_name, alias):
@@ -278,7 +286,6 @@ async def alias(ctx, alias, realm_name):
 @client.event
 async def on_member_update(before, after):
     if len(after.roles) == 1:
-        LOG.debug(f'{after} is a buyer')
         return
 
     if before.nick != after.nick and after.nick is not None:
