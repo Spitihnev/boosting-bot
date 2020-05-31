@@ -109,6 +109,7 @@ async def gold_add(ctx, *args):
     if len(args) > last_mention_idx + 2:
         raise BadArgument(f'Got too many arguments: {args}.')
 
+    results = []
     for mention in mentions:
         nick = ctx.guild.get_member(mention2id(mention)).nick
 
@@ -116,20 +117,26 @@ async def gold_add(ctx, *args):
         try:
             db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id, parse_nick2realm(nick))
         except db_handling.DatabaseError:
+            await ctx.message.author.send(f'Critical error occured, contant administrator.')
             return
+        except BadArgument as e:
+            results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
+            continue
 
         try:
             db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
         except BadArgument as e:
-            await ctx.message.author.send(e)
-            return
+            results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
+            continue
 
         except:
             LOG.error(f'Database Error: {traceback.format_exc()}')
             await ctx.message.author.send('Critical error occured, contact administrator.')
             return
 
-        await ctx.message.channel.send(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was processed.')
+        results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was processed.')
+
+    await ctx.message.channel.send('\n'.join(results))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
