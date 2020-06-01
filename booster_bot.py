@@ -178,7 +178,7 @@ async def admin_list_transactions(ctx, mention, limit: int=10):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.command(name='top')
-@commands.has_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
+@commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, limit: int=10):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if limit < 1:
@@ -198,7 +198,7 @@ async def list_transactions(ctx, limit: int=10):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.command(name='realm-top')
-@commands.has_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
+@commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, realm_name: str, limit: int=10):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if limit < 1:
