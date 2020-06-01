@@ -40,11 +40,10 @@ async def on_ready():
 async def on_message(message):
     #LOG.debug(f'{client.user}')
     #LOG.debug(f'Registered message from {message.author} with content {message.content}')
-    LOG.debug(config.get('cmd_channels'))
     if isinstance(message.channel, discord.channel.DMChannel):
         return
 
-    if message.author == client.user or message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels'):
+    if message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels'):
         LOG.debug(f'skipping processing of msg: {message.author} {QUIT_CALLED} {message.channel}')
         return
 
