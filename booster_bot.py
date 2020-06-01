@@ -304,15 +304,6 @@ async def on_member_update(before, after):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 @client.event
-async def on_error(event, *args, **kwargs):
-    msg = args[0]
-    LOG.error(f'{msg.author}@{msg.channel} : "{msg.content}"\n{traceback.format_exc()}')
-    usr = client.get_user(config.get('my_id'))
-    await usr.send(f'{msg.author}@{msg.channel} : "{msg.content}"\n{traceback.format_exc()}')
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-@client.event
 async def on_command_error(ctx, error):
     if isinstance(error, CommandNotFound):
         await ctx.message.author.send(f'{error} is not a valid command')
