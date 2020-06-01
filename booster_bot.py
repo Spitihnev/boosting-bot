@@ -230,7 +230,7 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
 
 @client.command('balance')
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
-async def balance(ctx, mention=None):
+async def balance(ctx):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     user_id = ctx.message.author.id
 
@@ -249,7 +249,11 @@ async def balance(ctx, mention=None):
 @commands.has_role('Management')
 async def admin_balance(ctx, mention):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
-    user_id = mention2id(mention)
+    if is_mention(mention):
+        user_id = mention2id(mention)
+    else:
+        raise BadArgument(f'"{mention}" is not a mention!')
+        return
 
     try:
         balance = db_handling.get_balance(user_id, ctx.guild.id)
