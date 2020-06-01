@@ -70,7 +70,6 @@ async def shutdown(ctx):
 #async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str=None):
 async def gold_add(ctx, *args):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
-    LOG.debug(args)
     mentions = []
     last_mention_idx = -1
     for idx, arg in enumerate(args):
@@ -81,10 +80,7 @@ async def gold_add(ctx, *args):
                 raise BadArgument('Mentions are expected to be in a row.')
                 return
 
-            LOG.debug(last_mention_idx)
             last_mention_idx = idx
-
-    LOG.debug('parsed mentions')
 
     try:
         transaction_type = args[0]
