@@ -186,12 +186,13 @@ async def list_transactions(ctx, limit: int=10):
         raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
         return
 
-    top_ppl = db_handling.list_top_boosters(limit)
+    top_ppl = db_handling.list_top_boosters(limit, ctx.guild.id)
 
     res_str = 'Current top boosters:\n'
-    for idx, data in enumerate(top_ppl): 
+    for idx, data in enumerate(top_ppl):
         res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
 
+    res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
     await ctx.message.channel.send(res_str)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
@@ -206,20 +207,19 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
         return
 
     try:
-        LOG.debug(realm_name)
         realm_name = constants.is_valid_realm(realm_name, True)
-        LOG.debug(realm_name)
     except:
         await ctx.message.author.send(f'{realm_name} is not a known EU realm!')
         raise BadArgument(f'{realm_name} is not a known EU realm!')
         return
 
-    top_ppl = db_handling.list_top_boosters(limit, realm_name)
+    top_ppl = db_handling.list_top_boosters(limit, ctx.guild.id, realm_name)
 
     res_str = f'Current top boosters for realm {realm_name}:\n'
     for idx, data in enumerate(top_ppl): 
         res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
 
+    res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
     await ctx.message.channel.send(res_str)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------

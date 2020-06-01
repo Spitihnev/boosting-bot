@@ -50,16 +50,17 @@ def list_transactions(user_id, limit):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def list_top_boosters(limit, realm_name=None):
+def list_top_boosters(limit, guild_id, realm_name=None):
     LOG.info(f'Listing top boosters for {realm_name}')
 
     res = []
     with _db_connect() as crs:
         if realm_name is None:
-            crs.execute('select sum(amount), booster_id from transactions group by booster_id order by amount desc limit {}'.format(limit))
+            crs.execute('select sum(amount), booster_id from transactions where guild_id=%s group by booster_id order by amount desc limit {}'.format(limit), guild_id)
         else:
-            crs.execute('select sum(amount), booster_id from transactions join users on (booster_id = dsc_id) where home_realm=%s group by booster_id order by amount desc limit {}'.format(limit), realm_name)
+            crs.execute('select sum(amount), booster_id from transactions join users on (booster_id = dsc_id) where home_realm=%s and guild_id=%s, group by booster_id order by amount desc limit {}'.format(limit), (guild_id, realm_name))
         for amount, name in crs:
+            LOG.debug((amount, name))
             res.append((amount, name))
 
     return res
