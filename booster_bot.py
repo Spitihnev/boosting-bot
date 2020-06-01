@@ -108,6 +108,8 @@ async def gold_add(ctx, *args):
     results = []
     for mention in mentions:
         nick = ctx.guild.get_member(mention2id(mention)).nick
+        if nick is None:
+            nick = ctx.guild.get_member(mention2id(mention)).name
 
         usr = client.get_user(mention2id(mention))
         try:
@@ -287,18 +289,24 @@ async def on_member_update(before, after):
     if len(after.roles) == 1:
         return
 
+    usr = client.get_user(after.id)
+    
     if before.nick != after.nick and after.nick is not None:
-        try:
-            realm_name = parse_nick2realm(after.nick)
-        except BadArgument as e:
-            LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
-            await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
-        else:
-            db_handling.add_user(f'{client.get_user(after.id).name}#{client.get_user(after.id).discriminator}', after.id, parse_nick2realm(after.nick))
+        to_check = after.nick
 
     elif after.nick is None and before.nick is not None:
         LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>.')
         await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>.')
+        return
+
+    try:
+        realm_name = parse_nick2realm(to_check)
+    except BadArgument as e:
+        LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
+        await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
+        return
+
+    db_handling.add_user(f'{usr.name}#{usr.discriminator}', after.id, parse_nick2realm(to_check))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
