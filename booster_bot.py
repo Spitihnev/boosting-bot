@@ -57,7 +57,7 @@ async def shutdown(ctx):
     await ctx.message.channel.send('Leaving...')
     QUIT_CALLED = True
     #to process anything in progress
-    await asyncio.sleep(60)
+    await asyncio.sleep(15)
     await client.logout()
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
