@@ -38,8 +38,6 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    #LOG.debug(f'{client.user}')
-    #LOG.debug(f'Registered message from {message.author} with content {message.content}')
     if isinstance(message.channel, discord.channel.DMChannel):
         return
 
@@ -66,7 +64,6 @@ async def shutdown(ctx):
 
 @client.command(name='gold')
 @commands.has_role('Management')
-#async def gold_add(ctx, transaction_type:str, mention: str, amount: str, comment: str=None):
 async def gold_add(ctx, *args):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     mentions = []
@@ -113,20 +110,20 @@ async def gold_add(ctx, *args):
 
         usr = client.get_user(mention2id(mention))
         try:
-            db_handling.add_user(f'{usr.name}#{usr.discriminator}', usr.id, parse_nick2realm(nick))
-        except db_handling.DatabaseError:
-            await ctx.message.author.send(f'Critical error occured, contant administrator.')
-            return
+            db_handling.add_user(usr.id, parse_nick2realm(nick))
         except BadArgument as e:
             results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
             continue
+        except:
+            LOG.error(f'Database Error: {traceback.format_exc()}')
+            await ctx.message.author.send(f'Critical error occured, contant administrator.')
+            return
 
         try:
             db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
         except BadArgument as e:
             results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
             continue
-
         except:
             LOG.error(f'Database Error: {traceback.format_exc()}')
             await ctx.message.author.send('Critical error occured, contact administrator.')
@@ -286,12 +283,12 @@ async def alias(ctx, alias, realm_name):
 
 @client.event
 async def on_member_update(before, after):
-    if len(after.roles) == 1:
+    if len(after.roles) == 1 or before.nick == after.nick:
         return
 
     usr = client.get_user(after.id)
     
-    if before.nick != after.nick and after.nick is not None:
+    if after.nick is not None:
         to_check = after.nick
 
     elif after.nick is None and before.nick is not None:

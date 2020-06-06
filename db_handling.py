@@ -140,18 +140,16 @@ def alias2realm(alias):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def add_user(name, discord_id, home_realm):
-    LOG.info(f'adding user {name} with id {discord_id} {home_realm}')
+def add_user(discord_id, home_realm):
+    LOG.info(f'adding user with id {discord_id} {home_realm}')
 
     conn = _db_connect()
     with conn.cursor() as crs:
         try:
-            crs.execute('insert into users (`name`, `dsc_id`, `home_realm`) values (%s, %s, %s) on duplicate key update home_realm=%s', (name, discord_id, home_realm, home_realm))
+            crs.execute('insert into users (`dsc_id`, `home_realm`) values (%s, %s) on duplicate key update home_realm=%s', (discord_id, home_realm, home_realm))
         except:
             raise DatabaseError(f'Failed to add new user with name {name}: {traceback.format_exc()}')
         conn.commit()
-        crs.execute('select * from users where dsc_id=%s', discord_id)
-        return crs.fetchone()
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -191,17 +189,6 @@ def add_realm(name):
         conn.commit()
         crs.execute('select id from realms where name=%s', name)
         return crs.fetchone()
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def name2dsc_id(name):
-    with _db_connect() as crs:
-        ret = crs.execute('select dsc_id from users where name=%s', name)
-        if ret == 0:
-            raise UserNotFoundError(f'User {name} not found!')
-        else:
-            for user_dsc_id in crs:
-                return user_dsc_id
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
