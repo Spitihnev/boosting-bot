@@ -303,7 +303,7 @@ async def on_member_update(before, after):
         await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
         return
 
-    db_handling.add_user(f'{usr.name}#{usr.discriminator}', after.id, parse_nick2realm(to_check))
+    db_handling.add_user(after.id, parse_nick2realm(to_check))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
