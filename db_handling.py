@@ -42,9 +42,9 @@ def get_balance(discord_id, guild_id):
 def list_transactions(user_id, limit):
     res = []
     with _db_connect() as crs:
-        crs.execute('select type, amount, date_added, comment, name from transactions join users on (dsc_id = author_id) where booster_id=%s order by id desc limit {}'.format(limit), user_id)
-        for type, amount, date_added, comment, name in crs:
-            res.append(f'transaction_type: {type}, amount:{amount}, date_added: {date_added}, comment: "{comment}", transaction_author: {name}')
+        crs.execute('select type, amount, date_added, comment, author_id from transactions where booster_id=%s order by id desc limit {}'.format(limit), user_id)
+        for type, amount, date_added, comment, author_id in crs:
+            res.append((f'transaction_type: {type}, amount:{amount}, date_added: {date_added}, comment: "{comment}"', author_id))
 
     return res
 

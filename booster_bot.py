@@ -131,7 +131,7 @@ async def gold_add(ctx, *args):
 
         results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was processed.')
 
-    await ctx.message.channel.send('\n'.join(results))
+    await ctx.message.channel.send(embed=discord.Embed(title='', description='\n'.join(results)))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -147,10 +147,10 @@ async def list_transactions(ctx, limit: int=10):
     transactions = db_handling.list_transactions(ctx.message.author.id, limit)
 
     transactions_string = ''
-    for t in transactions:
-        transactions_string += t+'\n'
+    for res_t, author_id in transactions:
+        transactions_string += res_t + f' author:{client.get_user(author_id).name}\n'
 
-    await ctx.message.channel.send(transactions_string)
+    await ctx.message.channel.send(embed=discord.Embed(title='', description=transactions_string))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -165,13 +165,11 @@ async def admin_list_transactions(ctx, mention, limit: int=10):
     usr_id = mention2id(mention)
     transactions = db_handling.list_transactions(usr_id, limit)
 
-    await ctx.message.channel.send(f'Last {limit} transactions for user: {ctx.guild.get_member(usr_id).name}')
+    transactions_string = f'Last {limit} transactions for user: {ctx.guild.get_member(usr_id).name}\n'
+    for res_t, author_id in transactions:
+        transactions_string += res_t + f' author:{client.get_user(author_id).name}\n'
 
-    transactions_string = ''
-    for t in transactions:
-        transactions_string += t+'\n'
-
-    await ctx.message.channel.send(transactions_string)
+    await ctx.message.channel.send(embed=discord.Embed(title='', description=transactions_string))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -191,7 +189,7 @@ async def list_transactions(ctx, limit: int=10):
         res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
 
     res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
-    await ctx.message.channel.send(res_str)
+    await ctx.message.channel.send(embed=discord.Embed(title='', description=res_str))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -218,7 +216,7 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
         res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
 
     res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
-    await ctx.message.channel.send(res_str)
+    await ctx.message.channel.send(embed=discord.Embed(title='', description=res_str))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -235,7 +233,7 @@ async def balance(ctx):
         await client.get_user(config.get('my_id')).send(f'Balance command error {traceback.format_exc()}')
         return
     
-    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance)
+    await ctx.message.channel.send(embed=discord.Embed(title='', description=f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -256,7 +254,7 @@ async def admin_balance(ctx, mention):
         await client.get_user(config.get('my_id')).send(f'Balance command error {traceback.format_exc()}')
         return
     
-    await ctx.message.channel.send(f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance)
+    await ctx.message.channel.send(embed=discord.Embed(title='', description=f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance))
 
 #-------------------------------------------------------------------------------------------------------------------------------------------
 
