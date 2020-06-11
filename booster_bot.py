@@ -186,7 +186,11 @@ async def list_transactions(ctx, limit: int=10):
 
     res_str = 'Current top boosters:\n'
     for idx, data in enumerate(top_ppl):
-        res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+        try:
+            res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+        # some users can leave and still be in DB
+        except AttributeError:
+            continue
 
     res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
     await ctx.message.channel.send(embed=discord.Embed(title='', description=res_str))
@@ -212,8 +216,12 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
     top_ppl = db_handling.list_top_boosters(limit, ctx.guild.id, realm_name)
 
     res_str = f'Current top boosters for realm {realm_name}:\n'
-    for idx, data in enumerate(top_ppl): 
-        res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+    for idx, data in enumerate(top_ppl):
+        try:
+            res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+        # some users can leave and still be in DB
+        except AttributeError:
+            continue
 
     res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
     await ctx.message.channel.send(embed=discord.Embed(title='', description=res_str))
