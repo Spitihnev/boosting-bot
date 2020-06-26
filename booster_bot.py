@@ -6,6 +6,7 @@ from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument
 import traceback
 import re
 import asyncio
+from typing import Union
 
 import config
 import db_handling
@@ -251,7 +252,7 @@ async def balance(ctx):
 
 @client.command('abalance')
 @commands.has_role('Management')
-async def admin_balance(ctx, mention):
+async def admin_balance(ctx, mention: str):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     if is_mention(mention):
         user_id = mention2id(mention)
@@ -272,7 +273,7 @@ async def admin_balance(ctx, mention):
 
 @client.command('alias')
 @commands.has_role('Management')
-async def alias(ctx, alias, realm_name):
+async def alias(ctx, alias: str, realm_name: str):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
     realm_name = constants.is_valid_realm(realm_name)
     try:
@@ -288,6 +289,21 @@ async def alias(ctx, alias, realm_name):
         else:
             if db_handling.add_alias(realm_name, alias, update=True):
                 await ctx.message.channel.send(f'Overwritten alias "{alias}"="{realm_name}"')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command('remove-user')
+@commands.has_role('Management')
+async def remove_user(ctx, mention_or_id: Union[str, int]):
+    LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
+    if is_mention(mention_or_id):
+        id = mention2id(mention_or_id)
+    else:
+        id = mention_or_id
+
+    db_handling.remove_user(id)
+
+    await ctx.message.channel.send(f'Removed user with id {id}')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
