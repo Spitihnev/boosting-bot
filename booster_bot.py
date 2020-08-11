@@ -63,7 +63,7 @@ async def shutdown(ctx):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command(name='gold')
+@client.command(name='gold', aliases=['g'])
 @commands.has_role('Management')
 async def gold_add(ctx, *args):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -123,20 +123,20 @@ async def gold_add(ctx, *args):
         try:
             db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
         except BadArgument as e:
-            results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
+            results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} failed: {e}.')
             continue
         except:
             LOG.error(f'Database Error: {traceback.format_exc()}')
             await ctx.message.author.send('Critical error occured, contact administrator.')
             return
 
-        results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} was processed.')
+        results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} was processed.')
 
     await ctx.message.channel.send(embed=discord.Embed(title='', description='\n'.join(results)))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command(name='list-transactions')
+@client.command(name='list-transactions', aliases=['lt'])
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, limit: int=10):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -155,7 +155,7 @@ async def list_transactions(ctx, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command(name='alist-transactions')
+@client.command(name='alist-transactions', alaises=['alt'])
 @commands.has_role('Management')
 async def admin_list_transactions(ctx, mention, limit: int=10):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -174,7 +174,7 @@ async def admin_list_transactions(ctx, mention, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command(name='top')
+@client.command(name='top', aliases=['t'])
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, limit: int=10):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -200,7 +200,7 @@ async def list_transactions(ctx, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command(name='realm-top')
+@client.command(name='realm-top', aliases=['rt', 'rtop'])
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def list_transactions(ctx, realm_name: str, limit: int=10):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -233,7 +233,7 @@ async def list_transactions(ctx, realm_name: str, limit: int=10):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command('balance')
+@client.command('balance', aliases=['b', 'bal'])
 @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
 async def balance(ctx):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -250,7 +250,7 @@ async def balance(ctx):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command('abalance')
+@client.command('abalance', aliases=['ab', 'abal'])
 @commands.has_role('Management')
 async def admin_balance(ctx, mention: str):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -292,7 +292,7 @@ async def alias(ctx, alias: str, realm_name: str):
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-@client.command('remove-user')
+@client.command('remove-user', aliases=['ru'])
 @commands.has_role('Management')
 async def remove_user(ctx, mention_or_id: Union[str, int]):
     LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
@@ -304,6 +304,19 @@ async def remove_user(ctx, mention_or_id: Union[str, int]):
     db_handling.remove_user(id)
 
     await ctx.message.channel.send(f'Removed user with id {id}')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+@client.command('attendance', aliases=['att'])
+@commands.has_role('Management')
+async def attendance(ctx, channel_name: str):
+    channel = discord.utils.get(ctx.message.guild.channels, name=channel_name, type=discord.ChannelType.voice)
+    if channel is None:
+        await ctx.message.channel.send(f'Voice channel with name "{channel_name}" not found!')
+        return
+
+    res = ' '.join([f'@{member.name}' for member in channel.members])
+    await ctx.message.channel.send(embed=discord.Embed(title=f'Members in {channel_name}:', description=f'{res}'))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -434,9 +447,9 @@ def gold_str2int(gold_str):
         raise BadArgument('Only positive amounts are accepted.')
     
     if m.group(2) == 'k':
-        return int_part * 1000
+        return int(int_part * 1000)
     elif m.group(2) == 'm':
-        return int_part * 1e6
+        return int(int_part * 1e6)
 
     return int(int_part)
 
