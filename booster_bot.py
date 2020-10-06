@@ -165,7 +165,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='alist-transactions', alaises=['alt'])
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def admin_list_transactions(ctx, mention, limit: int=10):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if limit < 1:
@@ -260,7 +260,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('abalance', aliases=['ab', 'abal'])
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def admin_balance(ctx, mention: str):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if is_mention(mention):
@@ -281,7 +281,7 @@ if __name__ == '__main__':
 #-------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('alias')
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def alias(ctx, alias: str, realm_name: str):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         realm_name = constants.is_valid_realm(realm_name)
@@ -302,7 +302,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('remove-user', aliases=['ru'])
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def remove_user(ctx, mention_or_id: Union[str, int]):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if is_mention(mention_or_id):
@@ -317,7 +317,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('attendance', aliases=['att'])
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def attendance(ctx, channel_name: str):
         channel = discord.utils.get(ctx.message.guild.channels, name=channel_name, type=discord.ChannelType.voice)
         if channel is None:
@@ -330,7 +330,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('track')
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def track(ctx, msg_url: str, track_for: int=24):
         #TODO validate url
         _, g_id, ch_id, msg_id = msg_url.rsplit('/', 3)
@@ -344,7 +344,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('list-tracked')
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def list_tracked(ctx, msg_url: str=None):
         #TODO list in a proper way
         LOG.debug(globals.tracked_msgs)
