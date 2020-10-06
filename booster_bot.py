@@ -75,6 +75,10 @@ if __name__ == '__main__':
     @client.command(name='gold', aliases=['g'])
     @commands.has_role('Management')
     async def gold_add(ctx, *args):
+        """
+        Expected format: !g add|deduct|payout user_mention1 ... user_mentionN gold_amount [comment]
+        Adds/deducts gold for specified user[s]. More than one user mention per command is allowed. Optional transaction comment can be included.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         mentions = []
         last_mention_idx = -1
@@ -148,6 +152,9 @@ if __name__ == '__main__':
     @client.command(name='list-transactions', aliases=['lt'])
     @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
     async def list_transactions(ctx, limit: int=10):
+        """
+        Lists your past 10 transactions. Limit of transactions can be overwritten by additional parameter.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if limit < 1:
             await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
@@ -167,6 +174,9 @@ if __name__ == '__main__':
     @client.command(name='alist-transactions', alaises=['alt'])
     @commands.has_any_role('Management', 'Support')
     async def admin_list_transactions(ctx, mention, limit: int=10):
+        """
+        Lists past 10 transactions for specified user. Limit of transactions can be overwritten by additional parameter.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if limit < 1:
             await ctx.message.author.send(f'{limit} is an invalid value to limit number of transactions!.')
@@ -185,7 +195,10 @@ if __name__ == '__main__':
 
     @client.command(name='top', aliases=['t'])
     @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
-    async def list_transactions(ctx, limit: int=10):
+    async def top(ctx, limit: int=10):
+        """
+        Lists top 10 boosters. Limit of listed top boosters can be overwritten by additional parameter.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if limit < 1:
             await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!.')
@@ -211,7 +224,10 @@ if __name__ == '__main__':
 
     @client.command(name='realm-top', aliases=['rt', 'rtop'])
     @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
-    async def list_transactions(ctx, realm_name: str, limit: int=10):
+    async def realm_top(ctx, realm_name: str, limit: int=10):
+        """
+        Lists top 10 boosters for specific realm. Limit of listed top boosters can be overwritten by additional parameter.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if limit < 1:
             await ctx.message.author.send(f'{limit} is an invalid value to limit number of boosters!')
@@ -245,6 +261,9 @@ if __name__ == '__main__':
     @client.command('balance', aliases=['b', 'bal'])
     @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
     async def balance(ctx):
+        """
+        Lists your current balance.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         user_id = ctx.message.author.id
 
@@ -262,6 +281,9 @@ if __name__ == '__main__':
     @client.command('abalance', aliases=['ab', 'abal'])
     @commands.has_any_role('Management', 'Support')
     async def admin_balance(ctx, mention: str):
+        """
+        Lists current balance for specified user.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if is_mention(mention):
             user_id = mention2id(mention)
@@ -283,6 +305,9 @@ if __name__ == '__main__':
     @client.command('alias')
     @commands.has_any_role('Management', 'Support')
     async def alias(ctx, alias: str, realm_name: str):
+        """
+        Creates/overwrites alias for a specific realm name.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         realm_name = constants.is_valid_realm(realm_name)
         try:
@@ -304,6 +329,9 @@ if __name__ == '__main__':
     @client.command('remove-user', aliases=['ru'])
     @commands.has_any_role('Management', 'Support')
     async def remove_user(ctx, mention_or_id: Union[str, int]):
+        """
+        Remove user from current active users list. Does not affect past transactions for user. Can be added by a new transaction in future.
+        """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if is_mention(mention_or_id):
             id = mention2id(mention_or_id)
@@ -319,6 +347,9 @@ if __name__ == '__main__':
     @client.command('attendance', aliases=['att'])
     @commands.has_any_role('Management', 'Support')
     async def attendance(ctx, channel_name: str):
+        """
+        Prints all users in a specific voice channel in a way that copied user names are transormed to mentions.
+        """
         channel = discord.utils.get(ctx.message.guild.channels, name=channel_name, type=discord.ChannelType.voice)
         if channel is None:
             await ctx.message.channel.send(f'Voice channel with name "{channel_name}" not found!')
@@ -332,6 +363,10 @@ if __name__ == '__main__':
     @client.command('track')
     @commands.has_any_role('Management', 'Support')
     async def track(ctx, msg_url: str, track_for: int=24):
+        """
+        Starts reactions tracking (added or removed by users) for limited amount of time (hours). You can get message URL by opening extra menu by right-clicking on specific message.
+        For mobile users enabling developer mode is needed to see the "copy URL" option.
+        """
         #TODO validate url
         _, g_id, ch_id, msg_id = msg_url.rsplit('/', 3)
         if msg_id not in globals.tracked_msgs:
@@ -346,7 +381,9 @@ if __name__ == '__main__':
     @client.command('list-tracked')
     @commands.has_any_role('Management', 'Support')
     async def list_tracked(ctx, msg_url: str=None):
-        #TODO list in a proper way
+        """
+        Lists all currently tracked messages. By supplying specific message url as additional argument only specific message tracking info is displayed.
+        """
         LOG.debug(globals.tracked_msgs)
 
         if msg_url is not None:
