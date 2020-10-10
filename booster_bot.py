@@ -355,8 +355,8 @@ if __name__ == '__main__':
             await ctx.message.channel.send(f'Voice channel with name "{channel_name}" not found!')
             return
 
-        res = ' '.join([f'@{member.name}' for member in channel.members])
-        await ctx.message.channel.send(embed=discord.Embed(title=f'Members in {channel_name}:', description=f'{res}'))
+        res = ' '.join([f'@{member.name}#{member.discriminator}' for member in channel.members])
+        await ctx.message.channel.send(embed=discord.Embed(title=f'{len(channel.members)} member{"s" if len(channel.members) > 1 else ""} in {channel_name}:', description=f'{res}'))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -444,6 +444,7 @@ if __name__ == '__main__':
 
     @client.event
     async def on_reaction_add(reaction, user):
+        LOG.debug(f'{user} added reaction for msg {reaction.message.id}')
         msg_id = str(reaction.message.id)
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
@@ -452,6 +453,7 @@ if __name__ == '__main__':
 
     @client.event
     async def on_reaction_remove(reaction, user):
+        LOG.debug(f'{user} removed reaction for msg {reaction.message.id}')
         msg_id = str(reaction.message.id)
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['removed'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
