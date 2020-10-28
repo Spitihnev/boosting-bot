@@ -20,6 +20,9 @@ import cogs
 if __name__ == '__main__':
     QUIT_CALLED = False
 
+    intents = discord.Intents.default()
+    intents.members = True
+
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
     handler = handlers.RotatingFileHandler('logs/log', maxBytes=10 * 50 ** 20, backupCount=10, encoding='utf-8')
     formatter = logging.Formatter('%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
@@ -28,7 +31,7 @@ if __name__ == '__main__':
     logging.getLogger('discord').setLevel(logging.INFO)
     logging.getLogger('websockets').setLevel(logging.INFO)
     LOG = logging.getLogger(__name__)
-    client = commands.Bot(command_prefix='!')
+    client = commands.Bot(command_prefix='!', intents=intents)
 
     globals.init()
 
