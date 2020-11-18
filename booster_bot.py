@@ -24,7 +24,7 @@ if __name__ == '__main__':
     intents.members = True
 
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
-    handler = handlers.RotatingFileHandler('logs/log', maxBytes=10 * 50 ** 20, backupCount=10, encoding='utf-8')
+    handler = handlers.RotatingFileHandler('logs/log', maxBytes=50 * 10 ** 20, backupCount=10, encoding='utf-8')
     formatter = logging.Formatter('%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
     handler.setFormatter(formatter)
     logging.getLogger('').addHandler(handler)
@@ -76,7 +76,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='gold', aliases=['g'])
-    @commands.has_role('Management')
+    @commands.has_any_role('Management', 'Support')
     async def gold_add(ctx, *args):
         """
         Expected format: !g add|deduct|payout user_mention1 ... user_mentionN gold_amount [comment]
@@ -109,6 +109,10 @@ if __name__ == '__main__':
             amount = args[last_mention_idx+1]
         except:
             raise BadArgument(f'Gold amount to process was not found in arguments {args}.')
+            return
+
+        if gold_str2int(amount) > 2 ** 31 - 1:
+            raise BadArgument('Only amounts between -2147483647 and 2147483647 are accepted.')
             return
 
         try:
