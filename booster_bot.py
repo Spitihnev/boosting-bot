@@ -152,7 +152,7 @@ if __name__ == '__main__':
 
             results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} was processed.')
 
-        await ctx.message.channel.send(embed=discord.Embed(title='', description='\n'.join(results)))
+        await send_channel_embed(ctx.message.channel, '\n'.join(results))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -174,7 +174,7 @@ if __name__ == '__main__':
         for res_t, author_id in transactions:
             transactions_string += res_t + f' author:{client.get_user(author_id).name}\n'
 
-        await ctx.message.channel.send(embed=discord.Embed(title='', description=transactions_string))
+        await send_channel_embed(ctx.message.channel, transactions_string)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -196,7 +196,7 @@ if __name__ == '__main__':
         for res_t, author_id in transactions:
             transactions_string += res_t + f' author:{client.get_user(author_id).name}\n'
 
-        await ctx.message.channel.send(embed=discord.Embed(title='', description=transactions_string))
+        await send_channel_embed(ctx.message.channel, transactions_string)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -225,7 +225,8 @@ if __name__ == '__main__':
                 continue
 
         res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
-        await ctx.message.channel.send(embed=discord.Embed(title='', description=res_str))
+
+        await send_channel_embed(ctx.message.channel, res_str)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -261,7 +262,7 @@ if __name__ == '__main__':
                 continue
 
         res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
-        await ctx.message.channel.send(embed=discord.Embed(title='', description=res_str))
+        await send_channel_embed(ctx.message.channel, res_str)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -398,7 +399,17 @@ if __name__ == '__main__':
         else:
             data = globals.tracked_msgs
 
-        await ctx.message.author.send(format_tracking_data(data, ctx.guild))
+        formatted_data = format_tracking_data(data, ctx.guild)
+
+        await send_channel_message(ctx.message.author, formatted_data if len(formatted_data) > 0 else 'There are no messages currently tracked.')
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('test-cmd')
+    @commands.is_owner()
+    async def test_cmd(ctx):
+        msg = '\n'.join(['some very long test message that bot should never be sending but it can happen sometimes anyway'] * 30)
+        await send_channel_message(ctx.message.channel, msg)
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -532,6 +543,30 @@ def _msg_author_check(author):
     def inner_check(msg):
         return msg.author == author
     return inner_check
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+async def send_channel_message(channel, msg):
+    for sendable_msg in chunk_message(msg):
+        await channel.send(sendable_msg)
+
+async def send_channel_embed(channel, msg, title=''):
+    for sendable_msg in chunk_message(msg):
+        await channel.send(embed=discord.Embed(title=title, description=sendable_msg))
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
+def chunk_message(msg, limit=2000):
+    tmp_msg = ''
+    for line in msg.split('\n'):
+        if len(line) + len(tmp_msg) + 1 < limit:
+            tmp_msg += '\n' + line
+        else:
+            yield tmp_msg
+            tmp_msg = line
+
+    if tmp_msg:
+        yield tmp_msg
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 

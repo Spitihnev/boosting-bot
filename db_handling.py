@@ -56,13 +56,12 @@ def list_top_boosters(limit, guild_id, realm_name=None):
     res = []
     with _db_connect() as crs:
         if realm_name is None:
-            crs.execute('select sum(amount) as s, booster_id from transactions where guild_id=%s and booster_id in (select dsc_id from users) group by booster_id order by s desc limit {}'.format(limit), guild_id)
+            crs.execute('select sum(amount) as s, booster_id from transactions where guild_id=%s and booster_id in (select dsc_id from users) group by booster_id having s != 0 order by s desc limit {}'.format(limit), guild_id)
         else:
-            crs.execute('select sum(amount) as s, booster_id from transactions join users on (booster_id = dsc_id) where home_realm=%s and guild_id=%s and booster_id in (select dsc_id from users) group by booster_id order by s desc limit {}'.format(limit), (realm_name, guild_id))
+            crs.execute('select sum(amount) as s, booster_id from transactions join users on (booster_id = dsc_id) where home_realm=%s and guild_id=%s and booster_id in (select dsc_id from users) group by booster_id having s != 0 order by s desc limit {}'.format(limit), (realm_name, guild_id))
         for amount, name in crs:
             LOG.debug((amount, name))
-            if amount != 0:
-                res.append((amount, name))
+            res.append((amount, name))
 
     return res
     
