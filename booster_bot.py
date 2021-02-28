@@ -17,6 +17,10 @@ import constants
 import globals
 import cogs
 
+#TODO move to a better place
+BOOSTER_RANKS = ['M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Alliance Booster']
+MNG_RANKS = ['Management', 'Support']
+
 if __name__ == '__main__':
     QUIT_CALLED = False
 
@@ -49,16 +53,15 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
-    async def on_message(message):
-        LOG.debug(f'{message.content} {message.id}')
-        if isinstance(message.channel, discord.channel.DMChannel):
+    async def on_message(ctx):
+        LOG.debug(f'{ctx.content} {ctx.id}')
+        if isinstance(ctx.channel, discord.channel.DMChannel):
             return
 
-        if message.author.bot or QUIT_CALLED or message.channel.name not in config.get('cmd_channels'):
-            LOG.debug(f'skipping processing of msg: {message.author} {QUIT_CALLED} {message.channel}')
-            return
-
-        await client.process_commands(message)
+        if not ctx.author.bot and not QUIT_CALLED and ctx.channel.name in config.get('cmd_channels'):
+            await client.process_commands(ctx)
+        else:
+            LOG.debug(f'skipping processing of msg: {ctx.author} {QUIT_CALLED} {ctx.channel}')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -76,7 +79,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='gold', aliases=['g'])
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def gold_add(ctx, *args):
         """
         Expected format: !g add|deduct|payout user_mention1 ... user_mentionN gold_amount [comment]
@@ -133,7 +136,7 @@ if __name__ == '__main__':
             try:
                 db_handling.add_user(usr.id, parse_nick2realm(nick))
             except BadArgument as e:
-                results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
+                results.append(f':x:{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount):00} failed: {e}.')
                 continue
             except:
                 LOG.error(f'Database Error: {traceback.format_exc()}')
@@ -143,21 +146,21 @@ if __name__ == '__main__':
             try:
                 db_handling.add_tranaction(transaction_type, usr.id, ctx.author.id, gold_str2int(amount), ctx.guild.id, comment)
             except BadArgument as e:
-                results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} failed: {e}.')
+                results.append(f':x:{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} failed: {e}.')
                 continue
             except:
                 LOG.error(f'Database Error: {traceback.format_exc()}')
                 await ctx.message.author.send('Critical error occured, contact administrator.')
                 return
 
-            results.append(f'{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} was processed.')
+            results.append(f':white_check_mark:{mention}: Transaction with type {transaction_type}, amount {gold_str2int(amount)} was processed.')
 
         await send_channel_embed(ctx.message.channel, '\n'.join(results))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='list-transactions', aliases=['lt'])
-    @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
+    @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
     async def list_transactions(ctx, limit: int=10):
         """
         Lists your past 10 transactions. Limit of transactions can be overwritten by additional parameter.
@@ -179,7 +182,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='alist-transactions', alaises=['alt'])
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def admin_list_transactions(ctx, mention, limit: int=10):
         """
         Lists past 10 transactions for specified user. Limit of transactions can be overwritten by additional parameter.
@@ -201,10 +204,11 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='top', aliases=['t'])
-    @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
-    async def top(ctx, limit: int=10):
+    @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
+    async def top(ctx, limit: int=10, *roles):
         """
         Lists top 10 boosters. Limit of listed top boosters can be overwritten by additional parameter.
+        If limit is specified there are accepted role names/mentions for filtering.
         """
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if limit < 1:
@@ -212,12 +216,36 @@ if __name__ == '__main__':
             raise BadArgument(f'{limit} is an invalid value to limit number of transactions!.')
             return
 
+        role_objects = []
+        for role in roles:
+            if is_mention(role):
+                role_object = ctx.guild.get_role(mention2id(role))
+                if role_object is not None:
+                    role_objects.append(role_object)
+            else:
+                for guild_role in ctx.guild.roles:
+                    if guild_role.name == role:
+                        role_objects.append(guild_role)
+
         top_ppl = db_handling.list_top_boosters(limit, ctx.guild.id)
 
-        res_str = 'Current top boosters:\n'
+        if role_objects:
+            res_str = f'Current top {limit} boosters:\n'
+        else:
+            res_str = f'Current top {limit} boosters with ranks {[role.name for role in role_objects]}:\n'
+
+        filtered_idx = 0
         for idx, data in enumerate(top_ppl):
             try:
-                res_str += f'#{idx + 1}{ctx.guild.get_member(data[1]).mention} : {data[0]}\n'
+                member = ctx.guild.get_member(data[1])
+                if role_objects:
+                    for role in role_objects:
+                        if role in member.roles:
+                            res_str += f'#{filtered_idx + 1}{member.mention} : {data[0]}\n'
+                            filtered_idx += 1
+                            break
+                else:
+                    res_str += f'#{idx + 1}{member.mention} : {data[0]}\n'
             # some users can leave and still be in DB
             except AttributeError:
                 LOG.warning(f'Unknown user ID: {data[1]}')
@@ -231,7 +259,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='realm-top', aliases=['rt', 'rtop'])
-    @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
+    @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
     async def realm_top(ctx, realm_name: str, limit: int=10):
         """
         Lists top 10 boosters for specific realm. Limit of listed top boosters can be overwritten by additional parameter.
@@ -267,7 +295,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('balance', aliases=['b', 'bal'])
-    @commands.has_any_role('Management', 'M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Jaina')
+    @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
     async def balance(ctx):
         """
         Lists your current balance.
@@ -287,7 +315,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('abalance', aliases=['ab', 'abal'])
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def admin_balance(ctx, mention: str):
         """
         Lists current balance for specified user.
@@ -311,7 +339,7 @@ if __name__ == '__main__':
 #-------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('alias')
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def alias(ctx, alias: str, realm_name: str):
         """
         Creates/overwrites alias for a specific realm name.
@@ -335,7 +363,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('remove-user', aliases=['ru'])
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def remove_user(ctx, mention_or_id: Union[str, int]):
         """
         Remove user from current active users list. Does not affect past transactions for user. Can be added by a new transaction in future.
@@ -353,7 +381,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('attendance', aliases=['att'])
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def attendance(ctx, channel_name: str):
         """
         Prints all users in a specific voice channel in a way that copied user names are transormed to mentions.
@@ -369,7 +397,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('track')
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def track(ctx, msg_url: str, track_for: int=24):
         """
         Starts reactions tracking (added or removed by users) for limited amount of time (hours). You can get message URL by opening extra menu by right-clicking on specific message.
@@ -387,7 +415,7 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('list-tracked')
-    @commands.has_any_role('Management', 'Support')
+    @commands.has_any_role(*MNG_RANKS)
     async def list_tracked(ctx, msg_url: str=None):
         """
         Lists all currently tracked messages. By supplying specific message url as additional argument only specific message tracking info is displayed.
@@ -462,10 +490,24 @@ if __name__ == '__main__':
 
     @client.event
     async def on_reaction_add(reaction, user):
+        if user.bot:
+            return
+
         LOG.debug(f'{user} added reaction for msg {reaction.message.id}')
         msg_id = str(reaction.message.id)
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+
+        if reaction.emoji == config.get('emojis')['process'] and reaction.message.channel.name == 'post-run':
+            try:
+                processed_boost = process_boost(reaction.message)
+                LOG.debug(processed_boost)
+                await user.send(processed_boost)
+                await reaction.message.add_reaction(config.get('emojis')['yes'])
+            except Exception as e:
+                LOG.debug(f'Failed to process boost message: {traceback.format_exc()}')
+                await user.send(e)
+                await reaction.message.add_reaction(config.get('emojis')['no'])
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -479,41 +521,63 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 def process_boost(msg):
-    boostee = None
+    """
+    current format:
+    comment: str
+    boost_ttl: parsable int (gold_str2int)
+    adv_cut: parsable int (gold_str2int)
+    booster list: one mention per line, advertiser is last
+    """
     advertiser = None
     price = 0
+    adv_cut = 0
     comment = ''
     boosters = []
 
-    for idx, ln in enumerate(msg.splitlines()):
-        LOG.debug(f'line {idx}: {ln}')
-        if idx == 0:
-            boostee = ln.split()[1].strip()
-            continue
+    to_parse = msg.content.splitlines()
+    mentions = [is_mention(line.strip()) for line in to_parse]
 
-        if idx == 1:
-            raw_comment, raw_price = ln.split('-')
-            price = int(raw_price.strip('k'))
-            comment = raw_comment[3:].strip()
-            continue
+    if not mentions[-1]:
+        raise BadArgument('Boost post run message should end in mention!')
+        return
 
-        if 'Advertiser' in ln or 'advertiser' in ln:
-            advertiser = parse_mention(ln)
-            continue
+    args_num = 0
+    for idx, bool_is_mention in enumerate(mentions):
+        if bool_is_mention:
+            args_num = idx
+            break
 
-        booster = parse_mention(ln)
-        if booster is not None:
-            boosters.append(booster)
-        else:
-            raise RuntimeError(f'{ln} contains no mention.')
+    if args_num < 2:
+        raise BadArgument('At least two arguments should be present in post run message!')
+        return
 
-    LOG.debug(f'Processed boost: boostee:{boostee}, advertiser:{advertiser}, run:{comment}, price:{price}, boosters:{boosters}')
-    return boostee, advertiser, comment, price, boosters
+    if args_num == 2:
+        comment = str(msg.id)
+        price = gold_str2int(to_parse[0].strip())
+        adv_cut = gold_str2int(to_parse[1].strip())
+
+    elif args_num == 3:
+        comment = to_parse[0].strip()
+        price = gold_str2int(to_parse[1].strip())
+        adv_cut = gold_str2int(to_parse[2].strip())
+
+    if adv_cut > price:
+        raise BadArgument('Advertiser cut cannot be bigger than boost price!')
+        return
+
+    boosters = [mention2id(booster_mention.strip()) for booster_mention in to_parse[args_num:-1]]
+
+    if adv_cut == 0:
+        boosters.append(mention2id(to_parse[-1].strip()))
+    else:
+        advertiser = mention2id(to_parse[-1].strip())
+
+    return f'boost {comment}: boosters: {[str(client.get_user(booster)) for booster in boosters]}\nbooster_cut: {(price-adv_cut) // len(boosters)}\nadvertiser: {client.get_user(advertiser)}\nadvertiser_cut:{adv_cut}'
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 def is_mention(msg):
-    return bool(re.match(r'^\<@!([0-9])+\>$', msg))
+    return bool(re.match(r'^\<@[!&]([0-9])+\>$', msg))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -578,15 +642,15 @@ def gold_str2int(gold_str):
         raise BadArgument(f'"{gold_str}" not not a valid gold amount. Accepted formats: <int_value>[mk]')
 
     int_part = int(m.group(1))
-    if int(m.group(1)) < 1:
-        raise BadArgument('Only positive amounts are accepted.')
+    if int(m.group(1)) < 0:
+        raise BadArgument('Only non-negative amounts are accepted.')
     
     if m.group(2) == 'k':
-        return int(int_part * 1000)
+        return int(float(int_part * 1000))
     elif m.group(2) == 'm':
-        return int(int_part * 1e6)
+        return int(float(int_part * 1e6))
 
-    return int(int_part)
+    return int(float(int_part))
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
