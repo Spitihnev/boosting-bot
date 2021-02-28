@@ -229,30 +229,33 @@ if __name__ == '__main__':
 
         top_ppl = db_handling.list_top_boosters(limit, ctx.guild.id)
 
-        if role_objects:
+        if len(role_objects) == 0:
             res_str = f'Current top {limit} boosters:\n'
         else:
             res_str = f'Current top {limit} boosters with ranks {[role.name for role in role_objects]}:\n'
 
         filtered_idx = 0
+        result_data = []
         for idx, data in enumerate(top_ppl):
             try:
                 member = ctx.guild.get_member(data[1])
                 if role_objects:
                     for role in role_objects:
                         if role in member.roles:
-                            res_str += f'#{filtered_idx + 1}{member.mention} : {data[0]}\n'
+                            result_data.append((filtered_idx + 1, member.mention, data[0]))
                             filtered_idx += 1
                             break
                 else:
-                    res_str += f'#{idx + 1}{member.mention} : {data[0]}\n'
+                    result_data.append((idx + 1, member.mention, data[0]))
             # some users can leave and still be in DB
             except AttributeError:
                 LOG.warning(f'Unknown user ID: {data[1]}')
-                res_str += f'#{idx + 1} {data[1]} : {data[0]}\n'
+                result_data.append((filtered_idx + 1, data[1], data[0]))
                 continue
 
-        res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
+        for result in result_data:
+            res_str += f'#{result[0]}{result[1]} : {result[2]}\n'
+        res_str += f'Top total: {sum([x[2] for x in result_data])}'
 
         await send_channel_embed(ctx.message.channel, res_str)
 
