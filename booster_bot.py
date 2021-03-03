@@ -250,11 +250,11 @@ if __name__ == '__main__':
             # some users can leave and still be in DB
             except AttributeError:
                 LOG.warning(f'Unknown user ID: {data[1]}')
-                result_data.append((filtered_idx + 1, data[1], data[0]))
+                result_data.append((idx + 1, data[1], data[0]))
                 continue
 
         for result in result_data:
-            res_str += f'#{result[0]}{result[1]} : {result[2]}\n'
+            res_str += f'#{result[0]} {result[1]} : {result[2]}\n'
         res_str += f'Top total: {sum([x[2] for x in result_data])}'
 
         await send_channel_embed(ctx.message.channel, res_str)
