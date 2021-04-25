@@ -4,13 +4,10 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument, MissingAnyRole
 import traceback
-import re
 import asyncio
 from typing import Union
-import datetime
-from dateutil import tz
-import json
 
+from helper_functions import *
 import config
 import db_handling
 import constants
@@ -20,6 +17,7 @@ import cogs
 #TODO move to a better place
 BOOSTER_RANKS = ['M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Alliance Booster']
 MNG_RANKS = ['Management', 'Support']
+__VERSION__ = '1.0.0'
 
 if __name__ == '__main__':
     QUIT_CALLED = False
@@ -39,7 +37,7 @@ if __name__ == '__main__':
 
     globals.init()
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
     async def on_ready():
@@ -50,20 +48,20 @@ if __name__ == '__main__':
 
         await client.change_presence(activity=discord.Game(name='!help for commands'))
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
     async def on_message(ctx):
-        LOG.debug(f'{ctx.content} {ctx.id}')
         if isinstance(ctx.channel, discord.channel.DMChannel):
             return
+        LOG.debug(f'{ctx.content} {ctx.id}')
 
         if not ctx.author.bot and not QUIT_CALLED and ctx.channel.name in config.get('cmd_channels'):
             await client.process_commands(ctx)
         else:
             LOG.debug(f'skipping processing of msg: {ctx.author} {QUIT_CALLED} {ctx.channel}')
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='quit')
     @commands.is_owner()
@@ -76,7 +74,7 @@ if __name__ == '__main__':
         await asyncio.sleep(15)
         await client.logout()
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='gold', aliases=['g'])
     @commands.has_any_role(*MNG_RANKS)
@@ -157,11 +155,11 @@ if __name__ == '__main__':
 
         await send_channel_embed(ctx.message.channel, '\n'.join(results))
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='list-transactions', aliases=['lt'])
     @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
-    async def list_transactions(ctx, limit: int=10):
+    async def list_transactions(ctx, limit: int = 10):
         """
         Lists your past 10 transactions. Limit of transactions can be overwritten by additional parameter.
         """
@@ -175,11 +173,15 @@ if __name__ == '__main__':
 
         transactions_string = ''
         for res_t, author_id in transactions:
-            transactions_string += res_t + f' author:{client.get_user(author_id).name}\n'
+            author = client.get_user(author_id)
+            if author is not None:
+                transactions_string += res_t + f' author:{client.get_user(author_id).name}\n'
+            else:
+                transactions_string += res_t + f' author:{author_id}\n'
 
         await send_channel_embed(ctx.message.channel, transactions_string)
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='alist-transactions', alaises=['alt'])
     @commands.has_any_role(*MNG_RANKS)
@@ -201,11 +203,11 @@ if __name__ == '__main__':
 
         await send_channel_embed(ctx.message.channel, transactions_string)
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='top', aliases=['t'])
     @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
-    async def top(ctx, limit: int=10, *roles):
+    async def top(ctx, limit: int = 10, *roles):
         """
         Lists top 10 boosters. Limit of listed top boosters can be overwritten by additional parameter.
         If limit is specified there are accepted role names/mentions for filtering.
@@ -259,11 +261,11 @@ if __name__ == '__main__':
 
         await send_channel_embed(ctx.message.channel, res_str)
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command(name='realm-top', aliases=['rt', 'rtop'])
     @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
-    async def realm_top(ctx, realm_name: str, limit: int=10):
+    async def realm_top(ctx, realm_name: str, limit: int = 10):
         """
         Lists top 10 boosters for specific realm. Limit of listed top boosters can be overwritten by additional parameter.
         """
@@ -295,7 +297,7 @@ if __name__ == '__main__':
         res_str += f'Top total: {sum([x[0] for x in top_ppl])}'
         await send_channel_embed(ctx.message.channel, res_str)
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('balance', aliases=['b', 'bal'])
     @commands.has_any_role(*(BOOSTER_RANKS + MNG_RANKS))
@@ -315,7 +317,7 @@ if __name__ == '__main__':
     
         await ctx.message.channel.send(embed=discord.Embed(title='', description=f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance))
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('abalance', aliases=['ab', 'abal'])
     @commands.has_any_role(*MNG_RANKS)
@@ -339,7 +341,7 @@ if __name__ == '__main__':
     
         await ctx.message.channel.send(embed=discord.Embed(title='', description=f'Balance for {ctx.guild.get_member(user_id).mention}:\n' + balance))
 
-#-------------------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('alias')
     @commands.has_any_role(*MNG_RANKS)
@@ -355,7 +357,7 @@ if __name__ == '__main__':
         except db_handling.DatabaseError:
 
             await ctx.message.channel.send(f'"{alias}" already exists overwrite[y/n]?')
-            msg = await client.wait_for('message', check=_msg_author_check(ctx.message.author), timeout=15)
+            msg = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=15)
 
             if msg.content not in ('y', 'n') or msg.content == 'n':
                 return
@@ -363,7 +365,7 @@ if __name__ == '__main__':
                 if db_handling.add_alias(realm_name, alias, update=True):
                     await ctx.message.channel.send(f'Overwritten alias "{alias}"="{realm_name}"')
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('remove-user', aliases=['ru'])
     @commands.has_any_role(*MNG_RANKS)
@@ -381,7 +383,7 @@ if __name__ == '__main__':
 
         await ctx.message.channel.send(f'Removed user with id {id}')
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('attendance', aliases=['att'])
     @commands.has_any_role(*MNG_RANKS)
@@ -397,11 +399,11 @@ if __name__ == '__main__':
         res = ' '.join([f'@{member.name}#{member.discriminator}' for member in channel.members])
         await ctx.message.channel.send(embed=discord.Embed(title=f'{len(channel.members)} member{"s" if len(channel.members) > 1 else ""} in {channel_name}:', description=f'{res}'))
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('track')
     @commands.has_any_role(*MNG_RANKS)
-    async def track(ctx, msg_url: str, track_for: int=24):
+    async def track(ctx, msg_url: str, track_for: int = 24):
         """
         Starts reactions tracking (added or removed by users) for limited amount of time (hours). You can get message URL by opening extra menu by right-clicking on specific message.
         For mobile users enabling developer mode is needed to see the "copy URL" option.
@@ -412,14 +414,14 @@ if __name__ == '__main__':
             globals.tracked_msgs[msg_id] = {'added': [], 'removed': [], 'author_id': ctx.message.author.id, 'guild_id': ctx.guild.id, 'limit': track_for, 'track_start': str(datetime.datetime.utcnow()), 'url': msg_url}
 
         # to be addedd in ver1.5
-        #msg_ref = discord.MessageReference(message_id=msg_id, guild_id=g_id, channel_id=ch_id)
+        # msg_ref = discord.MessageReference(message_id=msg_id, guild_id=g_id, channel_id=ch_id)
         await ctx.message.author.send(f'{msg_url}\n Tracking started for {track_for} hours.')
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('list-tracked')
     @commands.has_any_role(*MNG_RANKS)
-    async def list_tracked(ctx, msg_url: str=None):
+    async def list_tracked(ctx, msg_url: str = None):
         """
         Lists all currently tracked messages. By supplying specific message url as additional argument only specific message tracking info is displayed.
         """
@@ -434,7 +436,33 @@ if __name__ == '__main__':
 
         await send_channel_message(ctx.message.author, formatted_data if len(formatted_data) > 0 else 'There are no messages currently tracked.')
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('info')
+    async def print_info(ctx):
+        await ctx.message.author.send(f'Key Blasters boosting bot version {__VERSION__}')
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('test')
+    @commands.has_any_role(*(MNG_RANKS + BOOSTER_RANKS))
+    async def add_or_remove_tester_role(ctx):
+        """
+        Add tester role if member does not have it or removes the tester role if already present.
+        """
+        tester_role = None
+        for role in ctx.guild.roles:
+            if 'Tester' in role.name:
+                tester_role = role
+                break
+
+        if any([tester_role.name == role.name for role in ctx.message.author.roles]):
+            await ctx.message.author.remove_roles(tester_role)
+        else:
+            await ctx.message.author.add_roles(tester_role)
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
 
     @client.command('test-cmd')
     @commands.is_owner()
@@ -442,15 +470,15 @@ if __name__ == '__main__':
         msg = '\n'.join(['some very long test message that bot should never be sending but it can happen sometimes anyway'] * 30)
         await send_channel_message(ctx.message.channel, msg)
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
 
     @client.event
     async def on_member_update(before, after):
         if len(after.roles) == 1 or before.nick == after.nick:
             return
 
-        usr = client.get_user(after.id)
-    
+        to_check = None
         if after.nick is not None:
             to_check = after.nick
 
@@ -460,7 +488,7 @@ if __name__ == '__main__':
             return
 
         try:
-            realm_name = parse_nick2realm(to_check)
+            _ = parse_nick2realm(to_check)
         except BadArgument as e:
             LOG.debug(f'To {after.nick}/{after.name}: You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
             await after.send(f'You have changed nickname to a bad format, please use <character_name>-<realm_name>. {e}')
@@ -468,51 +496,51 @@ if __name__ == '__main__':
 
         db_handling.add_user(after.id, parse_nick2realm(to_check))
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
     async def on_command_error(ctx, error):
-        if isinstance(error, CommandNotFound):
-            await ctx.message.author.send(f'{error} is not a valid command')
-            return
-        elif isinstance(error, MissingRequiredArgument):
-            await ctx.message.author.send(f'"{ctx.command}" is missing arguments, {error}')
-            return
-        elif isinstance(error, MissingAnyRole):
-            await ctx.message.author.send(f'Insufficient priviledges to execute "{ctx.message.content}". {error}.')
-            return
-        else:
-            await ctx.message.author.send(f'{ctx.command} failed. Reason: {error}')
+        if not ctx.message.author.id != config.get('my_id'):
+            if isinstance(error, CommandNotFound):
+                await ctx.message.author.send(f'{error} is not a valid command')
+                return
+            elif isinstance(error, MissingRequiredArgument):
+                await ctx.message.author.send(f'"{ctx.command}" is missing arguments, {error}')
+                return
+            elif isinstance(error, MissingAnyRole):
+                await ctx.message.author.send(f'Insufficient priviledges to execute "{ctx.message.content}". {error}.\n')
+                return
+            else:
+                await ctx.message.author.send(f'{ctx.command} failed. Reason: {error}')
 
-        LOG.error(f'Command error: {ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}\n{traceback.format_exc()}')
+        original_error = getattr(error, 'original', error)
+        original_tb = original_error.__traceback__
+        tb_list = traceback.format_exception(original_error, original_error, original_tb)
+        exc_str = ''
+        for ln in tb_list:
+            exc_str += ln
+
+        LOG.error(f'Command error: {ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}\n{exc_str}')
     
         usr = client.get_user(config.get('my_id'))
-        await usr.send(f'{ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}')
+        await usr.send(f'{ctx.author}@{ctx.channel} : "{ctx.message.content}"\n{error}\n{exc_str}')
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
     async def on_reaction_add(reaction, user):
         if user.bot:
             return
 
+        # tracking logic
         LOG.debug(f'{user} added reaction for msg {reaction.message.id}')
         msg_id = str(reaction.message.id)
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
 
-        if reaction.emoji == config.get('emojis')['process'] and reaction.message.channel.name == 'post-run':
-            try:
-                processed_boost = process_boost(reaction.message)
-                LOG.debug(processed_boost)
-                await user.send(processed_boost)
-                await reaction.message.add_reaction(config.get('emojis')['yes'])
-            except Exception as e:
-                LOG.debug(f'Failed to process boost message: {traceback.format_exc()}')
-                await user.send(e)
-                await reaction.message.add_reaction(config.get('emojis')['no'])
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
 
     @client.event
     async def on_reaction_remove(reaction, user):
@@ -521,7 +549,8 @@ if __name__ == '__main__':
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['removed'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
 
 def process_boost(msg):
     """
@@ -577,109 +606,8 @@ def process_boost(msg):
 
     return f'boost {comment}: boosters: {[str(client.get_user(booster)) for booster in boosters]}\nbooster_cut: {(price-adv_cut) // len(boosters)}\nadvertiser: {client.get_user(advertiser)}\nadvertiser_cut:{adv_cut}'
 
-#--------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
-def is_mention(msg):
-    return bool(re.match(r'^\<@[!&]([0-9])+\>$', msg))
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def parse_mention(msg):
-    m = re.match(r'^(.+)?(\<@![0-9]+\>)(.+)?$', msg)
-    if m:
-        return m.group(2)
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def mention2id(mention):
-    return int(mention[3:-1])
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def parse_nick2realm(nick):
-    try:
-        realm_name = nick.split('-')[1].strip()
-    except:
-        raise BadArgument(f'Nick "{nick}" is not in correct format, please use <character_name>-<realm_name>.')
-    realm_name = constants.is_valid_realm(realm_name, True)
-    return realm_name
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def _msg_author_check(author):
-    def inner_check(msg):
-        return msg.author == author
-    return inner_check
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-async def send_channel_message(channel, msg):
-    for sendable_msg in chunk_message(msg):
-        await channel.send(sendable_msg)
-
-async def send_channel_embed(channel, msg, title=''):
-    for sendable_msg in chunk_message(msg):
-        await channel.send(embed=discord.Embed(title=title, description=sendable_msg))
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def chunk_message(msg, limit=2000):
-    tmp_msg = ''
-    for line in msg.split('\n'):
-        if len(line) + len(tmp_msg) + 1 < limit:
-            tmp_msg += '\n' + line
-        else:
-            yield tmp_msg
-            tmp_msg = line
-
-    if tmp_msg:
-        yield tmp_msg
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def gold_str2int(gold_str):
-    gold_str = gold_str.lower()
-    
-    m = re.match('^([0-9]+)([kKmM]?)$', gold_str)
-    if not m:
-        raise BadArgument(f'"{gold_str}" not not a valid gold amount. Accepted formats: <int_value>[mk]')
-
-    int_part = int(m.group(1))
-    if int(m.group(1)) < 0:
-        raise BadArgument('Only non-negative amounts are accepted.')
-    
-    if m.group(2) == 'k':
-        return int(float(int_part * 1000))
-    elif m.group(2) == 'm':
-        return int(float(int_part * 1e6))
-
-    return int(float(int_part))
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def utc2local_time(utc_datetime: str):
-    dt = datetime.datetime.strptime(utc_datetime, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=tz.tzutc())
-    return dt.astimezone(tz.gettz('Europe/Bratislava')).strftime('%Y-%m-%d %H:%M:%S')
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-def format_tracking_data(data: dict, guild):
-    res = ''
-    for tracked_msg in data.values():
-        res += f'---- {tracked_msg["url"]} ----\n'
-        res += 'Added reactions:\n'
-        for dt, id, emoji in tracked_msg['added']:
-            member = guild.get_member(id)
-            res += f'{emoji} {utc2local_time(dt)}: {member.nick if member.nick is not None else f"{member.name}#{member.discriminator}"}\n'
-
-        res += '\nRemoved reactions:\n'
-        for dt, id, emoji in tracked_msg['removed']:
-            member = guild.get_member(id)
-            res += f'{emoji} {utc2local_time(dt)}: {member.nick if member.nick is not None else f"{member.name}#{member.discriminator}"}\n'
-
-    return res
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     client.add_cog(cogs.TrackerCallback(client))
