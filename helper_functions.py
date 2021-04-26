@@ -12,13 +12,13 @@ LOG = logging.getLogger(__name__)
 
 
 def is_mention(msg):
-    return bool(re.match(r'^\<@[!&]([0-9])+\>$', msg))
+    return bool(re.match(r'^<@[!&]([0-9])+>$', msg))
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
 def parse_mention(msg):
-    m = re.match(r'^(.+)?(\<@![0-9]+\>)(.+)?$', msg)
+    m = re.match(r'^(.+)?(<@![0-9]+>)(.+)?$', msg)
     if m:
         return m.group(2)
 

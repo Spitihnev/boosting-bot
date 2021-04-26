@@ -8,6 +8,7 @@ import asyncio
 from typing import Union
 
 from helper_functions import *
+from event_objects import Boost, Booster
 import config
 import db_handling
 import constants
@@ -17,13 +18,17 @@ import cogs
 #TODO move to a better place
 BOOSTER_RANKS = ['M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Alliance Booster']
 MNG_RANKS = ['Management', 'Support']
-__VERSION__ = '1.0.0'
+if config.get('debug', default=False):
+    MNG_RANKS.append('Tester')
+__VERSION__ = config.get('version')
 
 if __name__ == '__main__':
     QUIT_CALLED = False
 
     intents = discord.Intents.default()
     intents.members = True
+    intents.emojis = True
+    intents.reactions = True
 
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
     handler = handlers.RotatingFileHandler('logs/log', maxBytes=50 * 10 ** 20, backupCount=10, encoding='utf-8')
@@ -47,6 +52,7 @@ if __name__ == '__main__':
                 LOG.debug(guild.id)
 
         await client.change_presence(activity=discord.Game(name='!help for commands'))
+        globals.init_custom_emojis(client)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -56,7 +62,7 @@ if __name__ == '__main__':
             return
         LOG.debug(f'{ctx.content} {ctx.id}')
 
-        if not ctx.author.bot and not QUIT_CALLED and ctx.channel.name in config.get('cmd_channels'):
+        if not ctx.author.bot and not QUIT_CALLED and (ctx.channel.name in config.get('cmd_channels') or (config.get('debug', default=False) and 'testing' in ctx.channel.name)):
             await client.process_commands(ctx)
         else:
             LOG.debug(f'skipping processing of msg: {ctx.author} {QUIT_CALLED} {ctx.channel}')
@@ -252,8 +258,11 @@ if __name__ == '__main__':
             # some users can leave and still be in DB
             except AttributeError:
                 LOG.warning(f'Unknown user ID: {data[1]}')
-                result_data.append((idx + 1, data[1], data[0]))
-                continue
+                if role_objects:
+                    result_data.append((filtered_idx + 1, data[1], data[0]))
+                    filtered_idx += 1
+                else:
+                    result_data.append((idx + 1, data[1], data[0]))
 
         for result in result_data:
             res_str += f'#{result[0]} {result[1]} : {result[2]}\n'
@@ -437,10 +446,102 @@ if __name__ == '__main__':
         await send_channel_message(ctx.message.author, formatted_data if len(formatted_data) > 0 else 'There are no messages currently tracked.')
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
+    @client.command('boost')
+    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    async def boost(ctx, timeout: int = 15):
+        try:
+            await ctx.message.channel.send('Boost pot size?')
+            gold_pot = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            gold_pot = gold_str2int(gold_pot.content)
 
-    @client.command('info')
+            #TODO check for corrent role
+            await ctx.message.channel.send('Boost advertiser?')
+            advertiser_mention = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            advertiser = ctx.guild.get_member(mention2id(advertiser_mention.content))
+            advertiser_name = advertiser.nick if advertiser.nick is not None else advertiser.name
+
+            realm_name = None
+            while realm_name is None:
+                await ctx.message.channel.send('Realm name?')
+                realm_name = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                try:
+                    realm_name = constants.is_valid_realm(realm_name.content, check_aliases=True)
+                except BadArgument as e:
+                    await ctx.message.channel.send(f'{e}')
+                    realm_name = None
+
+            await ctx.message.channel.send('Want to have anyone already signed for the boost? use mention')
+            boosters = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            boosters = [booster for booster in boosters.content.split() if is_mention(booster)]
+
+            boosters_objects = []
+            is_anyone_keyholder = False
+            for booster in boosters:
+                await ctx.message.channel.send(embed=discord.Embed(description=f'Role for {booster}? One or more from: tank/dps/healer', title=''))
+                roles = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                roles = [role.lower() for role in roles.content.split()]
+                if roles[0] in ('tank', 'dps', 'healer'):
+                    boosters_objects.append(Booster(mention=booster, **{f'is_{roles[0]}': True}))
+                    for role in roles[1:]:
+                        boosters_objects[0].__setattr__(f'is_{role}', True)
+
+                if not is_anyone_keyholder:
+                    await ctx.message.channel.send(f'Keyholder? [y]es/[n]o')
+                    keyholder = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                    if keyholder.content in ('y', 'yes'):
+                        boosters_objects[-1].is_keyholder = True
+                        is_anyone_keyholder = True
+
+            await ctx.message.channel.send('Dungeon key?')
+            dungeon = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            dungeon = dungeon.content
+
+            await ctx.message.channel.send('Armor stack? Use role mention or "no"')
+            armor_stack = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            if is_mention(armor_stack.content):
+                armor_stack = ctx.guild.get_role(mention2id(armor_stack.content)).name
+
+            number_of_boosts = None
+            while number_of_boosts is None:
+                await ctx.message.channel.send('Number of boosts?')
+                number_of_boosts = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                try:
+                    number_of_boosts = int(number_of_boosts.content)
+                except ValueError:
+                    await ctx.message.channel.send(f'{number_of_boosts.content} if not a number!')
+                    number_of_boosts = None
+
+            await ctx.message.channel.send('Character to whisper?')
+            char_to_whisper = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            char_to_whisper = char_to_whisper.content
+
+            await ctx.message.channel.send('Anything else to add? If not type "-".')
+            note = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            note = note.content
+            if note == '-':
+                note = None
+
+        except asyncio.TimeoutError:
+            await ctx.message.channel.send(f'Got no response in {timeout}s, canceling event creation.')
+            return
+
+        boost_obj = Boost(boost_author=ctx.message.author.nick, advertiser=advertiser_name, boosters=boosters_objects, realm_name=realm_name, armor_stack=armor_stack,
+                          character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon)
+
+        boost_msg = await ctx.message.channel.send(embed=boost_obj.embed())
+
+        # reactions for controls
+        await boost_msg.add_reaction(globals.emojis['tank'])
+        await boost_msg.add_reaction(globals.emojis['healer'])
+        await boost_msg.add_reaction(globals.emojis['dps'])
+        await boost_msg.add_reaction(config.get('emojis')['keyholder'])
+        await boost_msg.add_reaction(config.get('emojis')['process'])
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('about')
     async def print_info(ctx):
-        await ctx.message.author.send(f'Key Blasters boosting bot version {__VERSION__}')
+        await ctx.message.channel.send(f'Key Blasters boosting bot version {__VERSION__}')
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -452,7 +553,7 @@ if __name__ == '__main__':
         """
         tester_role = None
         for role in ctx.guild.roles:
-            if 'Tester' in role.name:
+            if 'Tester' == role.name:
                 tester_role = role
                 break
 
@@ -467,8 +568,8 @@ if __name__ == '__main__':
     @client.command('test-cmd')
     @commands.is_owner()
     async def test_cmd(ctx):
-        msg = '\n'.join(['some very long test message that bot should never be sending but it can happen sometimes anyway'] * 30)
-        await send_channel_message(ctx.message.channel, msg)
+        #msg = '\n'.join(['some very long test message that bot should never be sending but it can happen sometimes anyway'] * 30)
+        await send_channel_message(ctx.message.channel, str(globals.emojis['tank']))
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -512,6 +613,9 @@ if __name__ == '__main__':
                 return
             else:
                 await ctx.message.author.send(f'{ctx.command} failed. Reason: {error}')
+
+        if isinstance(error, (CommandNotFound, MissingRequiredArgument, MissingAnyRole, BadArgument)):
+            return
 
         original_error = getattr(error, 'original', error)
         original_tb = original_error.__traceback__
