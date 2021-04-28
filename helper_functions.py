@@ -4,15 +4,16 @@ import discord
 from discord.ext.commands.errors import BadArgument
 import logging
 import datetime
+from typing import List
 
 import constants
-
+import globals
 
 LOG = logging.getLogger(__name__)
 
 
 def is_mention(msg):
-    return bool(re.match(r'^<@[!&]([0-9])+>$', msg))
+    return bool(re.match(r'^<@[!&]?([0-9])+>$', msg))
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
@@ -26,7 +27,11 @@ def parse_mention(msg):
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
 def mention2id(mention):
-    return int(mention[3:-1])
+    id_str = ''
+    for char in mention:
+        if char in '0123456789':
+            id_str += char
+    return int(id_str)
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
@@ -123,3 +128,15 @@ def format_tracking_data(data: dict, guild):
     return res
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
+
+def user_has_any_role(user_roles: List[discord.Role], roles_to_check: List[str]):
+    for role in user_roles:
+        if role.name in roles_to_check:
+            return True
+    return False
+
+
+def msg_id2boost_uuid(msg_id):
+    for boost_uuid, boost in globals.open_boosts.items():
+        if boost[0].id == msg_id:
+            return boost_uuid

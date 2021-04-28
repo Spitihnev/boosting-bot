@@ -82,7 +82,7 @@ def add_tranaction(type, booster_id, transaction_author_id, amount, guild_id, co
 def add_boost(raw_boostee: str, advertisers: typing.List[discord.User], boosters:typing.List[discord.User], price: int, comment: str):
     boostee, boostee_realm_name = raw_boostee.split('-')
     boostee_realm_id = realm2id(boostee_realm_name)
-    advertisers_str = ','.join([db_user[0] for db_user in user_list2tuple(advertisets)])
+    advertisers_str = ','.join([db_user[0] for db_user in user_list2tuple(advertisers)])
     boosters_str = ','.join([db_user[0] for db_user in user_list2tuple(boosters)])
 
     with _db_connect() as crs:
@@ -148,7 +148,7 @@ def add_user(discord_id, home_realm):
         try:
             crs.execute('insert into users (`dsc_id`, `home_realm`) values (%s, %s) on duplicate key update home_realm=%s', (discord_id, home_realm, home_realm))
         except:
-            raise DatabaseError(f'Failed to add new user with name {name}: {traceback.format_exc()}')
+            raise DatabaseError(f'Failed to add new user with id {discord_id}: {traceback.format_exc()}')
         conn.commit()
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
@@ -185,7 +185,7 @@ def add_alias(realm_name, alias, update=False):
                 return True
             except Exception as e:
                 LOG.error(f'{e}, {traceback.format_exc()}')
-                raise DatabaseError('Critical error occured, contact administrator.')
+                raise DatabaseError('Critical error occurred, contact administrator.')
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -234,7 +234,7 @@ def user_list2tuple(users: typing.List[discord.User]):
             elif rows == 0:
                 id, discord_id, name = add_user(f'{user.name}#{user.discriminator}', user.id)
 
-            res.append((id, dsc_id, name))
+            res.append((id, discord_id, name))
     return res
 
 #--------------------------------------------------------------------------------------------------------------------------------------------

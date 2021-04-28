@@ -16,7 +16,7 @@ import globals
 import cogs
 
 #TODO move to a better place
-BOOSTER_RANKS = ['M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Alliance Booster']
+BOOSTER_RANKS = ['M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Alliance Booster', 'SL Booster', 'SL Blaster']
 MNG_RANKS = ['Management', 'Support']
 if config.get('debug', default=False):
     MNG_RANKS.append('Tester')
@@ -498,8 +498,11 @@ if __name__ == '__main__':
 
             await ctx.message.channel.send('Armor stack? Use role mention or "no"')
             armor_stack = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
-            if is_mention(armor_stack.content):
-                armor_stack = ctx.guild.get_role(mention2id(armor_stack.content)).name
+            armor_stack = armor_stack.content
+            if is_mention(armor_stack):
+                armor_stack = ctx.guild.get_role(mention2id(armor_stack)).name
+            else:
+                armor_stack = 'no'
 
             number_of_boosts = None
             while number_of_boosts is None:
@@ -515,10 +518,10 @@ if __name__ == '__main__':
             char_to_whisper = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
             char_to_whisper = char_to_whisper.content
 
-            await ctx.message.channel.send('Anything else to add? If not type "-".')
+            await ctx.message.channel.send('Anything else to add? If not type "no".')
             note = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
             note = note.content
-            if note == '-':
+            if note in ('no', 'n'):
                 note = None
 
         except asyncio.TimeoutError:
@@ -536,6 +539,8 @@ if __name__ == '__main__':
         await boost_msg.add_reaction(globals.emojis['dps'])
         await boost_msg.add_reaction(config.get('emojis')['keyholder'])
         await boost_msg.add_reaction(config.get('emojis')['process'])
+
+        globals.open_boosts[boost_obj.uuid] = (boost_msg, boost_obj)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -639,8 +644,31 @@ if __name__ == '__main__':
         # tracking logic
         LOG.debug(f'{user} added reaction for msg {reaction.message.id}')
         msg_id = str(reaction.message.id)
+
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+
+        boost_uuid = msg_id2boost_uuid(reaction.message.id)
+        if boost_uuid is not None:
+            # check if the emoji is one of used
+            id_or_emoji = reaction.emoji if isinstance(reaction.emoji, str) else reaction.emoji.id
+            for emoji_name, emoji_id in config.get('emojis').items():
+                if id_or_emoji == emoji_id:
+                    break
+
+            #TODO check armor stack role
+            if user_has_any_role(user.roles, BOOSTER_RANKS) and ('dps', 'tank', 'healer', 'keyholder'):
+                boost_msg, boost = globals.open_boosts[boost_uuid]
+                armor_stack = boost_msg.embeds[0].fields[2].value
+                if armor_stack != 'no' and not user_has_any_role(user.roles, [armor_stack]) and emoji_name not in ('tank', 'healer'):
+                    await user.send(f'You need to have {armor_stack} role to sign up for this boost!')
+                    await reaction.remove(user)
+                else:
+                    boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
+                    globals.open_boosts[boost_uuid] = boost_msg, boost
+                    await boost_msg.edit(embed=boost.embed())
+            else:
+                await reaction.remove(user)
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
@@ -648,10 +676,27 @@ if __name__ == '__main__':
 
     @client.event
     async def on_reaction_remove(reaction, user):
+        if user.bot:
+            return
+
         LOG.debug(f'{user} removed reaction for msg {reaction.message.id}')
         msg_id = str(reaction.message.id)
         if msg_id in globals.tracked_msgs:
             globals.tracked_msgs[msg_id]['removed'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+
+        boost_uuid = msg_id2boost_uuid(reaction.message.id)
+        if boost_uuid is not None:
+            # check if the emoji is one of used
+            id_or_emoji = reaction.emoji if isinstance(reaction.emoji, str) else reaction.emoji.id
+            for emoji_name, emoji_id in config.get('emojis').items():
+                if id_or_emoji == emoji_id:
+                    break
+
+        if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
+            boost_msg, boost = globals.open_boosts[boost_uuid]
+            boost.remove_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
+            await boost_msg.edit(embed=boost.embed())
+            globals.open_boosts[boost_uuid] = boost_msg, boost
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
