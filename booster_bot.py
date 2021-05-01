@@ -455,10 +455,12 @@ if __name__ == '__main__':
             gold_pot = gold_str2int(gold_pot.content)
 
             #TODO check for corrent role
-            await ctx.message.channel.send('Boost advertiser?')
-            advertiser_mention = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
-            advertiser = ctx.guild.get_member(mention2id(advertiser_mention.content))
-            advertiser_name = advertiser.nick if advertiser.nick is not None else advertiser.name
+            advertiser = None
+            while advertiser is None:
+                await ctx.message.channel.send('Boost advertiser?')
+                advertiser_mention = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                if is_mention(advertiser_mention.content):
+                    advertiser = ctx.guild.get_member(mention2id(advertiser_mention.content))
 
             realm_name = None
             while realm_name is None:
@@ -477,13 +479,15 @@ if __name__ == '__main__':
             boosters_objects = []
             is_anyone_keyholder = False
             for booster in boosters:
-                await ctx.message.channel.send(embed=discord.Embed(description=f'Role for {booster}? One or more from: tank/dps/healer', title=''))
-                roles = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
-                roles = [role.lower() for role in roles.content.split()]
-                if roles[0] in ('tank', 'dps', 'healer'):
-                    boosters_objects.append(Booster(mention=booster, **{f'is_{roles[0]}': True}))
-                    for role in roles[1:]:
-                        boosters_objects[0].__setattr__(f'is_{role}', True)
+                role = None
+                while role is None:
+                    await ctx.message.channel.send(embed=discord.Embed(description=f'Role for {booster}? One or more from: tank/dps/healer', title=''))
+                    roles = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                    roles = [role.lower() for role in roles.content.split()]
+                    if roles[0] in ('tank', 'dps', 'healer'):
+                        boosters_objects.append(Booster(mention=booster))
+                        for role in roles:
+                            boosters_objects[-1].__setattr__(f'is_{role}', True)
 
                 if not is_anyone_keyholder:
                     await ctx.message.channel.send(f'Keyholder? [y]es/[n]o')
@@ -491,6 +495,14 @@ if __name__ == '__main__':
                     if keyholder.content in ('y', 'yes'):
                         boosters_objects[-1].is_keyholder = True
                         is_anyone_keyholder = True
+
+            await ctx.message.channel.send('Limit singup only for Blasters for 2min?')
+            blaster_resp = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+            blaster_resp = blaster_resp.content
+            if blaster_resp in ('no', 'n'):
+                blaster_resp = 0
+            else:
+                blaster_resp = 24
 
             await ctx.message.channel.send('Dungeon key?')
             dungeon = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
@@ -528,8 +540,8 @@ if __name__ == '__main__':
             await ctx.message.channel.send(f'Got no response in {timeout}s, canceling event creation.')
             return
 
-        boost_obj = Boost(boost_author=ctx.message.author.nick, advertiser=advertiser_name, boosters=boosters_objects, realm_name=realm_name, armor_stack=armor_stack,
-                          character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon)
+        boost_obj = Boost(boost_author=ctx.message.author.nick, advertiser=advertiser, boosters=boosters_objects, realm_name=realm_name, armor_stack=armor_stack,
+                          character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon, blaster_only_clock=blaster_resp)
 
         boost_msg = await ctx.message.channel.send(embed=boost_obj.embed())
 
@@ -541,6 +553,35 @@ if __name__ == '__main__':
         await boost_msg.add_reaction(config.get('emojis')['process'])
 
         globals.open_boosts[boost_obj.uuid] = (boost_msg, boost_obj)
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('cancel')
+    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    async def cancel(ctx, boost_id: str):
+        boost_msg, boost_obj = globals.open_boosts.get(boost_id, (None, None))
+        if boost_obj is not None:
+            boost_obj.status = 'closed'
+            globals.open_boosts.pop(boost_id)
+            await boost_msg.edit(embed=boost_obj.embed())
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('kick')
+    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    async def kick(ctx, boost_id: str, booster_mention: str):
+        if not is_mention(booster_mention):
+            await ctx.message.channel.send(f'{booster_mention} is not a mention!')
+            return
+
+        boost_msg, boost_obj = globals.open_boosts.get(boost_id, (None, None))
+        if boost_obj is not None:
+            for idx, booster in enumerate(boost_obj.boosters):
+                if booster.mention == booster_mention:
+                    boost_obj.boosters.pop(idx)
+                    break
+
+            await boost_msg.edit(embed=boost_obj.embed())
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -643,10 +684,56 @@ if __name__ == '__main__':
 
         # tracking logic
         LOG.debug(f'{user} added reaction for msg {reaction.message.id}')
-        msg_id = str(reaction.message.id)
+        msg_id = reaction.message.id
 
-        if msg_id in globals.tracked_msgs:
-            globals.tracked_msgs[msg_id]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+        if str(msg_id) in globals.tracked_msgs:
+            globals.tracked_msgs[str(msg_id)]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+
+        if msg_id in globals.unprocessed_transactions:
+            LOG.debug('Transaction reaction: %s', reaction.emoji)
+            yes_emoji = config.get('emojis', 'yes')
+            no_emoji = config.get('emojis', 'no')
+            if reaction.emoji == yes_emoji:
+                # add transactions
+                LOG.debug(reaction.message.embeds[0].to_dict())
+                comment = reaction.message.embeds[0].to_dict()['title'].split()[1]
+                transaction_data = reaction.message.embeds[0].to_dict()['fields'][0]
+
+                results = []
+                for ln in transaction_data['value'].splitlines():
+                    mention, amount = ln.split()
+                    amount = amount.split('.')[0]
+                    nick = reaction.message.guild.get_member(mention2id(mention)).nick
+                    if nick is None:
+                        nick = reaction.message.guild.get_member(mention2id(mention)).name
+
+                    usr = client.get_user(mention2id(mention))
+                    try:
+                        db_handling.add_user(usr.id, parse_nick2realm(nick))
+                    except BadArgument as e:
+                        results.append(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
+                        continue
+                    except:
+                        LOG.error(f'Database Error: {traceback.format_exc()}')
+                        await user.send(f'Critical error occured, contant administrator.')
+                        return
+
+                    try:
+                        db_handling.add_tranaction('add', usr.id, user.id, int(amount), reaction.message.guild.id, comment)
+                    except BadArgument as e:
+                        results.append(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
+                        continue
+                    except:
+                        LOG.error(f'Database Error: {traceback.format_exc()}')
+                        await user.send('Critical error occured, contact administrator.')
+                        return
+
+                    results.append(f':white_check_mark:{mention}: Transaction with type add, amount {int(amount)} was processed.')
+
+                await send_channel_embed(reaction.message.channel, '\n'.join(results))
+            if reaction.emoji == no_emoji:
+                #TODO maybe this is not needed
+                pass
 
         boost_uuid = msg_id2boost_uuid(reaction.message.id)
         if boost_uuid is not None:
@@ -656,20 +743,39 @@ if __name__ == '__main__':
                 if id_or_emoji == emoji_id:
                     break
 
-            #TODO check armor stack role
-            if user_has_any_role(user.roles, BOOSTER_RANKS) and ('dps', 'tank', 'healer', 'keyholder'):
+            #TODO team take functionality
+            if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
                 boost_msg, boost = globals.open_boosts[boost_uuid]
+                if boost.status != 'open':
+                    return
                 armor_stack = boost_msg.embeds[0].fields[2].value
                 if armor_stack != 'no' and not user_has_any_role(user.roles, [armor_stack]) and emoji_name not in ('tank', 'healer'):
                     await user.send(f'You need to have {armor_stack} role to sign up for this boost!')
                     await reaction.remove(user)
-                else:
-                    boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
-                    globals.open_boosts[boost_uuid] = boost_msg, boost
-                    await boost_msg.edit(embed=boost.embed())
-            else:
+                    return
+                if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, ['SL Blaster']):
+                    await user.send(f'This boost is currently reserved for SL Blaster rank, wait {boost.blaster_only_clock* 5}s until it\'s open for Boosters.')
+                    await reaction.remove(user)
+                    return
+
+                boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
+                globals.open_boosts[boost_uuid] = boost_msg, boost
+                await boost_msg.edit(embed=boost.embed())
+            elif emoji_name != 'process':
                 await reaction.remove(user)
 
+            if user_has_any_role(user.roles, MNG_RANKS) and emoji_name == 'process':
+                boost_msg, boost = globals.open_boosts[boost_uuid]
+                if boost.status == 'open':
+                    return
+
+                embed = boost.process()
+                if embed is not None:
+                    #TODO send to some other channel
+                    transaction_msg = await boost_msg.channel.send(embed=embed)
+                    await transaction_msg.add_reaction(config.get('emojis', 'yes'))
+                    await transaction_msg.add_reaction(config.get('emojis', 'no'))
+                    globals.unprocessed_transactions[transaction_msg.id] = boost.uuid
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -692,11 +798,11 @@ if __name__ == '__main__':
                 if id_or_emoji == emoji_id:
                     break
 
-        if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
-            boost_msg, boost = globals.open_boosts[boost_uuid]
-            boost.remove_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
-            await boost_msg.edit(embed=boost.embed())
-            globals.open_boosts[boost_uuid] = boost_msg, boost
+            if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
+                boost_msg, boost = globals.open_boosts[boost_uuid]
+                boost.remove_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
+                await boost_msg.edit(embed=boost.embed())
+                globals.open_boosts[boost_uuid] = boost_msg, boost
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -760,4 +866,5 @@ def process_boost(msg):
 
 if __name__ == '__main__':
     client.add_cog(cogs.TrackerCallback(client))
+    client.add_cog(cogs.BoostCallback(client))
     client.run(config.get('token'))

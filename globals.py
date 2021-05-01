@@ -4,10 +4,11 @@ import config
 def init():
     global tracked_msgs
     global open_boosts
+    global unprocessed_transactions
 
     tracked_msgs = {}
     open_boosts = {}
-
+    unprocessed_transactions = {}
 
 def init_custom_emojis(client):
     global emojis

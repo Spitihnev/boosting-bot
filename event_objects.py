@@ -66,7 +66,7 @@ class Boost:
 
     pot: int
     boost_author: str
-    advertiser: str
+    advertiser: discord.Member
     boosters: List[Booster]
     realm_name: str
     character_to_whisper: str
@@ -76,6 +76,10 @@ class Boost:
     note: str = None
     team_take: str = None
     uuid: str = str(uuid.uuid4())
+    status: str = 'open'
+    blaster_only_clock: int = 24
+    team_take_clock: int = 0
+    include_advertiser_in_payout: bool = True
 
     def __post_init__(self):
         cuts = config.get('cuts')
@@ -87,10 +91,10 @@ class Boost:
             self._mng_cut = cuts['default']['mng']
 
     def embed(self):
-        embed = discord.Embed(title=self.advertiser)
+        embed = discord.Embed(title=self.advertiser.display_name, color=0x00ff00 if self.status == 'open' else 0xff0000)
         embed.set_thumbnail(url='https://logos-download.com/wp-content/uploads/2016/02/WOW_logo-700x701.png')
         embed.add_field(name='Pot', value=f'{self.pot:6d}g', inline=True)
-        embed.add_field(name='Booster cut', value=f'{(self.pot * (1 - (self._adv_cut + self._mng_cut)) / 4):6.0f}g', inline=True)
+        embed.add_field(name='Booster cut', value=f'{(self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4):6.0f}g', inline=True)
         embed.add_field(name='Armor stack', value=self.armor_stack, inline=False)
         embed.add_field(name='Number of boosts', value=f'{self.boosts_number:1d}', inline=True)
         embed.add_field(name='Realm name', value=self.realm_name, inline=True)
@@ -100,7 +104,7 @@ class Boost:
             embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
         if self.team_take is not None:
             embed.add_field(name='Team boost', value=self.team_take)
-        embed.add_field(name='Advertiser', value=self.advertiser, inline=False)
+        embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=False)
         embed.add_field(name='Character to whisper', value='/w ' + self.character_to_whisper, inline=True)
         embed.set_footer(text=self.uuid)
         return embed
@@ -126,6 +130,9 @@ class Boost:
         return res_string
 
     def add_booster(self, booster):
+        if self.status != 'open':
+            return False
+
         for booster_idx, signed_booster in enumerate(self.boosters):
             if signed_booster.mention == booster.mention:
                 self.boosters[booster_idx] += booster
@@ -141,6 +148,9 @@ class Boost:
         return False
 
     def remove_booster(self, booster):
+        if self.status != 'open':
+            return False
+
         for booster_idx, signed_booster in enumerate(self.boosters):
             if signed_booster.mention == booster.mention:
                 self.boosters[booster_idx] -= booster
@@ -177,3 +187,36 @@ class Boost:
             return False
 
         return True
+
+    def process(self):
+        if self.status == 'open':
+            return
+
+        embed = discord.Embed(title=f'Boost {self.uuid}')
+        transactions = {}
+        booster_cut = self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4
+        adv_cut = (self.pot * self._adv_cut) // 4
+        for booster in self.boosters:
+            transactions[booster.mention] = booster_cut
+
+        if self.include_advertiser_in_payout:
+            if self.advertiser.mention in transactions:
+                transactions[self.advertiser.mention] += adv_cut
+            else:
+                transactions[self.advertiser.mention] = adv_cut
+
+        embed.add_field(name='Transactions to be processed:', value='\n'.join([f'{mention} {gold_sum}' for mention, gold_sum in transactions.items()]))
+        return embed
+
+    def clock_tick(self):
+        if self.blaster_only_clock > 0:
+            self.blaster_only_clock -= 1
+        if self.team_take_clock > 0:
+            self.team_take_clock -= 1
+
+    def start_boost(self):
+        if len(self.boosters) == 4 and self.is_this_valid_setup(check_keyholder=True) and self.status == 'open':
+            self.status = 'started'
+            return True
+        else:
+            return False

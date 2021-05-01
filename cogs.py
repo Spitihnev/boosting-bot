@@ -43,3 +43,26 @@ class TrackerCallback(commands.Cog):
     async def before_update_tracked(self):
         LOG.debug('calling before update tracked')
         await self.bot.wait_until_ready()
+
+
+class BoostCallback(commands.Cog):
+    """
+    Counts down time for reserved boosts and starts boosts when full
+    """
+    def __init__(self, bot):
+        self.bot = bot
+        self.update_boosts.start()
+
+    def cog_unload(self):
+        self.update_boosts.cancel()
+
+    @tasks.loop(seconds=5.0)
+    async def update_boosts(self):
+        for msg, boost_obj in globals.open_boosts.values():
+            boost_obj.clock_tick()
+            if boost_obj.start_boost():
+                await msg.edit(embed=boost_obj.embed())
+
+    @update_boosts.before_loop
+    async def before_update_boosts(self):
+        await self.bot.wait_until_ready()
