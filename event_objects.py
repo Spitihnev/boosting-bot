@@ -1,6 +1,6 @@
 import discord
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union
 import uuid
 
 import config
@@ -72,18 +72,22 @@ class Boost:
     character_to_whisper: str
     key: str
     armor_stack: str
+    uuid: Union[str, None] = None
     boosts_number: int = 1
     note: str = None
     team_take: str = None
-    uuid: str = str(uuid.uuid4())
     status: str = 'open'
     blaster_only_clock: int = 24
     team_take_clock: int = 0
     include_advertiser_in_payout: bool = True
+    bigger_adv_cuts: bool = False
 
     def __post_init__(self):
+        if self.uuid is None:
+            self.uuid = str(uuid.uuid4())
+
         cuts = config.get('cuts')
-        if self.realm_name in cuts:
+        if self.realm_name in cuts and self.bigger_adv_cuts:
             self._adv_cut = cuts[self.realm_name]['adv']
             self._mng_cut = cuts[self.realm_name]['mng']
         else:
@@ -104,7 +108,9 @@ class Boost:
             embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
         if self.team_take is not None:
             embed.add_field(name='Team boost', value=self.team_take)
-        embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=False)
+        embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=True)
+        if self.include_advertiser_in_payout:
+            embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6.0f}g')
         embed.add_field(name='Character to whisper', value='/w ' + self.character_to_whisper, inline=True)
         embed.set_footer(text=self.uuid)
         return embed
@@ -195,7 +201,7 @@ class Boost:
         embed = discord.Embed(title=f'Boost {self.uuid}')
         transactions = {}
         booster_cut = self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4
-        adv_cut = (self.pot * self._adv_cut) // 4
+        adv_cut = self.pot * self._adv_cut
         for booster in self.boosters:
             transactions[booster.mention] = booster_cut
 

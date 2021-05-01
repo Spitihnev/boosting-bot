@@ -456,11 +456,23 @@ if __name__ == '__main__':
 
             #TODO check for corrent role
             advertiser = None
+            bigger_adv_cuts = False
             while advertiser is None:
                 await ctx.message.channel.send('Boost advertiser?')
                 advertiser_mention = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
                 if is_mention(advertiser_mention.content):
                     advertiser = ctx.guild.get_member(mention2id(advertiser_mention.content))
+                    if user_has_any_role(advertiser.roles, ['HUGE Advertiser']):
+                        bigger_adv_cuts = True
+
+            include_adv_cut = None
+            while include_adv_cut is None:
+                await ctx.message.channel.send('Keep ([y]es) advertiser cut or not ([n]o)?')
+                keep_cut = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
+                if keep_cut.content in ('y', 'yes'):
+                    include_adv_cut = False
+                if keep_cut.content in ('n', 'no'):
+                    include_adv_cut = True
 
             realm_name = None
             while realm_name is None:
@@ -541,7 +553,8 @@ if __name__ == '__main__':
             return
 
         boost_obj = Boost(boost_author=ctx.message.author.nick, advertiser=advertiser, boosters=boosters_objects, realm_name=realm_name, armor_stack=armor_stack,
-                          character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon, blaster_only_clock=blaster_resp)
+                          character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon, blaster_only_clock=blaster_resp,
+                          include_advertiser_in_payout=include_adv_cut, bigger_adv_cuts=bigger_adv_cuts)
 
         boost_msg = await ctx.message.channel.send(embed=boost_obj.embed())
 
@@ -615,7 +628,8 @@ if __name__ == '__main__':
     @commands.is_owner()
     async def test_cmd(ctx):
         #msg = '\n'.join(['some very long test message that bot should never be sending but it can happen sometimes anyway'] * 30)
-        await send_channel_message(ctx.message.channel, str(globals.emojis['tank']))
+        for role in ctx.message.author.roles:
+            await ctx.message.author.send(role.color)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
