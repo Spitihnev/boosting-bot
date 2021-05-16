@@ -59,8 +59,8 @@ class BoostCallback(commands.Cog):
     @tasks.loop(seconds=5.0)
     async def update_boosts(self):
         for msg, boost_obj in globals.open_boosts.values():
-            boost_obj.clock_tick()
-            if boost_obj.start_boost():
+            should_update =  boost_obj.clock_tick()
+            if boost_obj.start_boost() or should_update:
                 await msg.edit(embed=boost_obj.embed())
 
     @update_boosts.before_loop

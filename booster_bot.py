@@ -448,7 +448,13 @@ if __name__ == '__main__':
 # --------------------------------------------------------------------------------------------------------------------------------------------
     @client.command('boost')
     @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
-    async def boost(ctx, timeout: int = 15):
+    async def boost(ctx, channel_mention, timeout: int = 15):
+        channel_id = mention2id(channel_mention)
+        channel = client.get_channel(channel_id)
+        if channel is None:
+            raise BadArgument(f'{channel_mention} is not a channel!')
+            return
+
         try:
             await ctx.message.channel.send('Boost pot size?')
             gold_pot = await client.wait_for('message', check=msg_author_check(ctx.message.author), timeout=timeout)
@@ -556,13 +562,14 @@ if __name__ == '__main__':
                           character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon, blaster_only_clock=blaster_resp,
                           include_advertiser_in_payout=include_adv_cut, bigger_adv_cuts=bigger_adv_cuts)
 
-        boost_msg = await ctx.message.channel.send(embed=boost_obj.embed())
+        boost_msg = await channel.send(embed=boost_obj.embed())
 
         # reactions for controls
         await boost_msg.add_reaction(globals.emojis['tank'])
         await boost_msg.add_reaction(globals.emojis['healer'])
         await boost_msg.add_reaction(globals.emojis['dps'])
         await boost_msg.add_reaction(config.get('emojis')['keyholder'])
+        await boost_msg.add_reaction(config.get('emojis')['team'])
         await boost_msg.add_reaction(config.get('emojis')['process'])
 
         globals.open_boosts[boost_obj.uuid] = (boost_msg, boost_obj)
@@ -627,9 +634,8 @@ if __name__ == '__main__':
     @client.command('test-cmd')
     @commands.is_owner()
     async def test_cmd(ctx):
-        #msg = '\n'.join(['some very long test message that bot should never be sending but it can happen sometimes anyway'] * 30)
         for role in ctx.message.author.roles:
-            await ctx.message.author.send(role.color)
+            await ctx.author.send(f'{role.name}: {role.color} {type(role.color)}')
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -753,20 +759,61 @@ if __name__ == '__main__':
         if boost_uuid is not None:
             # check if the emoji is one of used
             id_or_emoji = reaction.emoji if isinstance(reaction.emoji, str) else reaction.emoji.id
+            found = False
             for emoji_name, emoji_id in config.get('emojis').items():
                 if id_or_emoji == emoji_id:
+                    found = True
                     break
 
-            #TODO team take functionality
-            if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
-                boost_msg, boost = globals.open_boosts[boost_uuid]
-                if boost.status != 'open':
+            if not found:
+                return
+
+            boost_msg, boost = globals.open_boosts[boost_uuid]
+
+            if emoji_name == 'team' and boost.team_take is None and user_has_any_role(user.roles, BOOSTER_RANKS):
+                team_role = None
+                for role in user.roles:
+                    if role.color == discord.Color.gold():
+                        team_role = role
+                        break
+
+                if team_role is not None:
+                    if team_role.name in boost.past_team_takes:
+                        await user.send(f'Your team have failed to fill this boost in the past already!')
+                        return
+
+                    boost.team_take = team_role.name
+                    boost.team_take_clock = 24
+                    boost.past_team_takes.append(team_role.name)
+
+                    boosters_to_keep = []
+                    for booster in boost.boosters:
+                        booster_dsc_user = reaction.message.guild.get_member(mention2id(booster.mention))
+                        if user_has_any_role(booster_dsc_user.roles, team_role.name):
+                            boosters_to_keep.append(booster)
+                    boost.boosters = boosters_to_keep
+
+                    LOG.debug(f'{boost_uuid} taken by {team_role.name}!')
+                    globals.open_boosts[boost_uuid] = boost_msg, boost
+                    await boost_msg.edit(embed=boost.embed())
                     return
+
+            if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
+                if boost.team_take is not None and not user_has_any_role(user.roles, [boost.team_take]):
+                    await user.send(f'This boost is currently reserved for {boost.team_take} team, wait {boost.team_take_clock * 5}s until it\'s open again.')
+                    await reaction.remove(user)
+                    return
+
+                if boost.status != 'open':
+                    await reaction.remove(user)
+                    return
+
                 armor_stack = boost_msg.embeds[0].fields[2].value
                 if armor_stack != 'no' and not user_has_any_role(user.roles, [armor_stack]) and emoji_name not in ('tank', 'healer'):
                     await user.send(f'You need to have {armor_stack} role to sign up for this boost!')
                     await reaction.remove(user)
                     return
+
                 if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, ['SL Blaster']):
                     await user.send(f'This boost is currently reserved for SL Blaster rank, wait {boost.blaster_only_clock* 5}s until it\'s open for Boosters.')
                     await reaction.remove(user)
@@ -775,8 +822,6 @@ if __name__ == '__main__':
                 boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
                 globals.open_boosts[boost_uuid] = boost_msg, boost
                 await boost_msg.edit(embed=boost.embed())
-            elif emoji_name != 'process':
-                await reaction.remove(user)
 
             if user_has_any_role(user.roles, MNG_RANKS) and emoji_name == 'process':
                 boost_msg, boost = globals.open_boosts[boost_uuid]

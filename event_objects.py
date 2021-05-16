@@ -94,8 +94,20 @@ class Boost:
             self._adv_cut = cuts['default']['adv']
             self._mng_cut = cuts['default']['mng']
 
+        self.past_team_takes = []
+
+    @property
+    def color(self):
+        if self.team_take is not None:
+            return 0xffff00
+
+        if self.status == 'open':
+            return 0x00ff00
+
+        return 0xff0000
+
     def embed(self):
-        embed = discord.Embed(title=self.advertiser.display_name, color=0x00ff00 if self.status == 'open' else 0xff0000)
+        embed = discord.Embed(title=self.advertiser.display_name, color=self.color)
         embed.set_thumbnail(url='https://logos-download.com/wp-content/uploads/2016/02/WOW_logo-700x701.png')
         embed.add_field(name='Pot', value=f'{self.pot:6d}g', inline=True)
         embed.add_field(name='Booster cut', value=f'{(self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4):6.0f}g', inline=True)
@@ -107,7 +119,7 @@ class Boost:
         if self.note is not None:
             embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
         if self.team_take is not None:
-            embed.add_field(name='Team boost', value=self.team_take)
+            embed.add_field(name='Team boost', value=self.team_take, inline=False)
         embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=True)
         if self.include_advertiser_in_payout:
             embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6.0f}g')
@@ -153,7 +165,7 @@ class Boost:
 
         return False
 
-    def remove_booster(self, booster):
+    def remove_booster(self, booster: Booster):
         if self.status != 'open':
             return False
 
@@ -217,8 +229,14 @@ class Boost:
     def clock_tick(self):
         if self.blaster_only_clock > 0:
             self.blaster_only_clock -= 1
+
         if self.team_take_clock > 0:
             self.team_take_clock -= 1
+            if self.team_take_clock == 0:
+                self.team_take = None
+                return True
+
+        return False
 
     def start_boost(self):
         if len(self.boosters) == 4 and self.is_this_valid_setup(check_keyholder=True) and self.status == 'open':
