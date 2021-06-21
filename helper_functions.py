@@ -4,7 +4,7 @@ import discord
 from discord.ext.commands.errors import BadArgument
 import logging
 import datetime
-from typing import List
+from typing import List, Union
 
 import constants
 import globals
@@ -129,9 +129,9 @@ def format_tracking_data(data: dict, guild):
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
-def user_has_any_role(user_roles: List[discord.Role], roles_to_check: List[str]):
+def user_has_any_role(user_roles: List[discord.Role], roles_to_check: List[Union[str, int]]):
     for role in user_roles:
-        if role.name in roles_to_check:
+        if role.name in roles_to_check or role.id in roles_to_check:
             return True
     return False
 

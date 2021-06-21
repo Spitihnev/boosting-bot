@@ -2,9 +2,13 @@ import discord
 from dataclasses import dataclass
 from typing import List, Union
 import uuid
+import logging
 
 import config
 import globals
+
+LOG = logging.getLogger(__name__)
+
 
 @dataclass
 class Booster:
@@ -64,6 +68,7 @@ class Boost:
     Base abstract boost class
     """
 
+    author_dc_id: int
     pot: int
     boost_author: str
     advertiser: discord.Member
@@ -72,6 +77,7 @@ class Boost:
     character_to_whisper: str
     key: str
     armor_stack: str
+    pings: Union[str, None] = None
     uuid: Union[str, None] = None
     boosts_number: int = 1
     note: str = None
@@ -95,6 +101,11 @@ class Boost:
             self._mng_cut = cuts['default']['mng']
 
         self.past_team_takes = []
+
+        #TODO this might not be useful
+        blaster = globals.known_roles.get('blaster', '')
+        if blaster:
+            self.pings += f' {blaster.mention}'
 
     @property
     def color(self):
@@ -148,6 +159,7 @@ class Boost:
         return res_string
 
     def add_booster(self, booster):
+        #TODO add some temporary spot if no key is in boost
         if self.status != 'open':
             return False
 
@@ -199,7 +211,7 @@ class Boost:
             if booster.is_healer and healer is None:
                 healer = booster
                 continue
-            if booster.is_dps and len(dps) < 3:
+            if booster.is_dps and len(dps) < 2:
                 dps.append(booster)
                 continue
             return False
@@ -242,5 +254,5 @@ class Boost:
         if len(self.boosters) == 4 and self.is_this_valid_setup(check_keyholder=True) and self.status == 'open':
             self.status = 'started'
             return True
-        else:
-            return False
+
+        return False

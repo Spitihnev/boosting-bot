@@ -58,10 +58,17 @@ class BoostCallback(commands.Cog):
 
     @tasks.loop(seconds=5.0)
     async def update_boosts(self):
-        for msg, boost_obj in globals.open_boosts.values():
-            should_update =  boost_obj.clock_tick()
-            if boost_obj.start_boost() or should_update:
-                await msg.edit(embed=boost_obj.embed())
+        async with globals.lock:
+            for msg, boost_obj in globals.open_boosts.values():
+                old_tick = boost_obj.blaster_only_clock
+                should_update = boost_obj.clock_tick()
+
+                if old_tick != 0 and boost_obj.blaster_only_clock == 0 and boost_obj.status == 'open':
+                    booster = globals.known_roles.get('booster', '')
+                    await msg.channel.send(f'Boost {boost_obj.uuid} now open for {booster.mention}')
+
+                if boost_obj.start_boost() or should_update:
+                    await msg.edit(embed=boost_obj.embed())
 
     @update_boosts.before_loop
     async def before_update_boosts(self):
