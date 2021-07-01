@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from dataclasses import dataclass
 from typing import List, Union
@@ -76,17 +78,20 @@ class Boost:
     realm_name: str
     character_to_whisper: str
     key: str
-    armor_stack: str
-    pings: Union[str, None] = None
+    armor_stack: Union[discord.Role, str]
+    lock: Union[None, asyncio.Lock] = None
+    pings: str = ''
     uuid: Union[str, None] = None
     boosts_number: int = 1
-    note: str = None
-    team_take: str = None
+    note: Union[str, None] = None
+    team_take: Union[discord.Role, None] = None
     status: str = 'open'
     blaster_only_clock: int = 24
     team_take_clock: int = 0
     include_advertiser_in_payout: bool = True
     bigger_adv_cuts: bool = False
+    temp_booster_slot: Union[None, Booster] = None
+    temp_booster_clock: int = 0
 
     def __post_init__(self):
         if self.uuid is None:
@@ -101,28 +106,38 @@ class Boost:
             self._mng_cut = cuts['default']['mng']
 
         self.past_team_takes = []
-
+        self.lock = asyncio.Lock()
         #TODO this might not be useful
-        blaster = globals.known_roles.get('blaster', '')
-        if blaster:
-            self.pings += f' {blaster.mention}'
+        #blaster = globals.known_roles.get('blaster', '')
+        #if blaster:
+        #    self.pings += f' {blaster.mention}'
 
     @property
     def color(self):
         if self.team_take is not None:
-            return 0xffff00
+            return discord.Color.gold()
 
         if self.status == 'open':
-            return 0x00ff00
+            return discord.Color.green()
 
-        return 0xff0000
+        if self.status == 'editing':
+            return discord.Color.orange()
+
+        return discord.Color.red()
+
+    @property
+    def armor_stack_mention(self):
+        if self.armor_stack != 'no':
+            return self.armor_stack.mention
+
+        return self.armor_stack
 
     def embed(self):
         embed = discord.Embed(title=self.advertiser.display_name, color=self.color)
         embed.set_thumbnail(url='https://logos-download.com/wp-content/uploads/2016/02/WOW_logo-700x701.png')
-        embed.add_field(name='Pot', value=f'{self.pot:6d}g', inline=True)
-        embed.add_field(name='Booster cut', value=f'{(self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4):6.0f}g', inline=True)
-        embed.add_field(name='Armor stack', value=self.armor_stack, inline=False)
+        embed.add_field(name='Pot', value=f'{self.pot:6,d}g', inline=True)
+        embed.add_field(name='Booster cut', value=f'{(self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4):6,.0f}g', inline=True)
+        embed.add_field(name='Armor stack', value=self.armor_stack_mention, inline=False)
         embed.add_field(name='Number of boosts', value=f'{self.boosts_number:1d}', inline=True)
         embed.add_field(name='Realm name', value=self.realm_name, inline=True)
         embed.add_field(name='Dungeon key', value=self.key, inline=False)
@@ -130,10 +145,10 @@ class Boost:
         if self.note is not None:
             embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
         if self.team_take is not None:
-            embed.add_field(name='Team boost', value=self.team_take, inline=False)
+            embed.add_field(name='Team boost', value=self.team_take.mention, inline=False)
         embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=True)
         if self.include_advertiser_in_payout:
-            embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6.0f}g')
+            embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6,.0f}g')
         embed.add_field(name='Character to whisper', value='/w ' + self.character_to_whisper, inline=True)
         embed.set_footer(text=self.uuid)
         return embed
@@ -159,9 +174,28 @@ class Boost:
         return res_string
 
     def add_booster(self, booster):
+        #TODO why this returns bool
         #TODO add some temporary spot if no key is in boost
         if self.status != 'open':
             return False
+
+        # edge case when there are 4 idiots without key signed
+        if len(self.boosters) == 4 and booster.is_keyholder and not booster.has_any_role() and self.temp_booster_slot is None and all([booster.mention != signed_booster.mention for signed_booster in self.boosters]):
+            LOG.debug('Adding temp booster %s', booster)
+            self.temp_booster_slot = booster
+            return True
+
+        if len(self.boosters) == 4 and booster.has_any_role() and self.temp_booster_slot is not None:
+            if self.temp_booster_slot.mention == booster.mention:
+                self.temp_booster_slot += booster
+
+                for booster_idx in range(3, -1, -1):
+                    temp_setup = [b for b in self.boosters]
+                    temp_setup[booster_idx] = self.temp_booster_slot
+                    if self.is_this_valid_setup(True, alternative_setup=temp_setup):
+                        self.boosters = temp_setup
+                        LOG.debug(f'{booster} used keyholder override.')
+                        return True
 
         for booster_idx, signed_booster in enumerate(self.boosters):
             if signed_booster.mention == booster.mention:
@@ -192,19 +226,23 @@ class Boost:
                 if not self.boosters[booster_idx].has_any_role() or not self.is_this_valid_setup(True):
                     self.boosters.pop(booster_idx)
 
-    def is_this_valid_setup(self, check_keyholder=False):
+    def is_this_valid_setup(self, check_keyholder=False, alternative_setup: Union[None, List[Booster]] = None):
+        if alternative_setup is not None:
+            boosters = alternative_setup
+        else:
+            boosters = self.boosters
 
-        if not any([booster.is_healer for booster in self.boosters]) and len(self.boosters) == 4:
+        if not any([booster.is_healer for booster in boosters]) and len(boosters) == 4:
             return False
-        if not any([booster.is_tank for booster in self.boosters]) and len(self.boosters) == 4:
+        if not any([booster.is_tank for booster in boosters]) and len(boosters) == 4:
             return False
-        if not any([booster.is_keyholder for booster in self.boosters]) and len(self.boosters) == 4 and check_keyholder:
+        if not any([booster.is_keyholder for booster in boosters]) and len(boosters) == 4 and check_keyholder:
             return False
 
         tank = None
         healer = None
         dps = []
-        for booster in sorted(self.boosters, key=len):
+        for booster in sorted(boosters, key=len):
             if booster.is_tank and tank is None:
                 tank = booster
                 continue
@@ -239,6 +277,8 @@ class Boost:
         return embed
 
     def clock_tick(self):
+        should_update = False
+
         if self.blaster_only_clock > 0:
             self.blaster_only_clock -= 1
 
@@ -246,9 +286,14 @@ class Boost:
             self.team_take_clock -= 1
             if self.team_take_clock == 0:
                 self.team_take = None
-                return True
+                should_update = True
 
-        return False
+        if self.temp_booster_clock > 0:
+            self.temp_booster_clock -= 1
+            if self.temp_booster_clock == 0:
+                self.temp_booster_slot = None
+
+        return should_update
 
     def start_boost(self):
         if len(self.boosters) == 4 and self.is_this_valid_setup(check_keyholder=True) and self.status == 'open':

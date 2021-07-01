@@ -5,6 +5,7 @@ from discord.ext.commands.errors import BadArgument
 import logging
 import datetime
 from typing import List, Union
+import asyncio
 
 import constants
 import globals
@@ -13,7 +14,7 @@ LOG = logging.getLogger(__name__)
 
 
 def is_mention(msg):
-    return bool(re.match(r'^<@[!&]?([0-9])+>$', msg))
+    return bool(re.match(r'^<@?[#!&]?([0-9])+>$', msg))
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
@@ -47,9 +48,12 @@ def parse_nick2realm(nick):
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
-def msg_author_check(author):
+def msg_author_check(author, channel=None):
     def inner_check(msg):
-        return msg.author == author
+        if channel is None:
+            return msg.author == author
+        else:
+            return msg.author == author and msg.channel == channel
 
     return inner_check
 
@@ -129,10 +133,14 @@ def format_tracking_data(data: dict, guild):
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+
 def user_has_any_role(user_roles: List[discord.Role], roles_to_check: List[Union[str, int]]):
-    for role in user_roles:
-        if role.name in roles_to_check or role.id in roles_to_check:
-            return True
+    try:
+        for role in user_roles:
+            if role.name in roles_to_check or role.id in roles_to_check:
+                return True
+    except:
+        LOG.debug(f'user roles: {user_roles} checked roles: {roles_to_check}')
     return False
 
 
@@ -140,3 +148,18 @@ def msg_id2boost_uuid(msg_id):
     for boost_uuid, boost in globals.open_boosts.items():
         if boost[0].id == msg_id:
             return boost_uuid
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+
+async def query_user(client: discord.Client, query: str,  channel: discord.TextChannel, author: discord.User, timeout: int = 15, on_query_fail_msg: str = None):
+    msg = None
+
+    await channel.send(query)
+    try:
+        msg = await client.wait_for('message', check=msg_author_check(author, channel), timeout=timeout)
+    except asyncio.exceptions.TimeoutError:
+        if on_query_fail_msg is not None:
+            await channel.send(on_query_fail_msg)
+
+    return msg

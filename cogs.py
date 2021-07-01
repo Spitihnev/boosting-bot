@@ -60,15 +60,19 @@ class BoostCallback(commands.Cog):
     async def update_boosts(self):
         async with globals.lock:
             for msg, boost_obj in globals.open_boosts.values():
-                old_tick = boost_obj.blaster_only_clock
-                should_update = boost_obj.clock_tick()
+                async with boost_obj.lock:
+                    old_tick = boost_obj.blaster_only_clock
+                    should_update = boost_obj.clock_tick()
 
-                if old_tick != 0 and boost_obj.blaster_only_clock == 0 and boost_obj.status == 'open':
-                    booster = globals.known_roles.get('booster', '')
-                    await msg.channel.send(f'Boost {boost_obj.uuid} now open for {booster.mention}')
+                    if old_tick != 0 and boost_obj.blaster_only_clock == 0 and boost_obj.status == 'open':
+                        booster = globals.known_roles.get('booster', '')
+                        await msg.channel.send(f'Boost {boost_obj.uuid} now open for {booster.mention}')
 
-                if boost_obj.start_boost() or should_update:
-                    await msg.edit(embed=boost_obj.embed())
+                    if should_update:
+                        await msg.edit(embed=boost_obj.embed())
+                    if boost_obj.start_boost():
+                        await msg.edit(embed=boost_obj.embed())
+                        await msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]))
 
     @update_boosts.before_loop
     async def before_update_boosts(self):
