@@ -6,6 +6,7 @@ from typing import List, Union
 import uuid
 import logging
 
+from helper_functions import mention2id
 import config
 import globals
 
@@ -22,12 +23,16 @@ class Booster:
     is_tank: bool = False
     is_healer: bool = False
     is_keyholder: bool = False
+    is_locked: bool = False
+
+    def __post_init__(self):
+        self.id = mention2id(self.mention)
 
     def has_any_role(self):
         return any([self.is_dps, self.is_tank, self.is_healer])
 
     def __add__(self, other):
-        if self.mention != other.mention:
+        if self.id != other.id:
             raise ValueError('Only roles for same booster can be added!')
 
         self.is_dps = self.is_dps or other.is_dps
@@ -38,7 +43,7 @@ class Booster:
         return self
 
     def __sub__(self, other):
-        if self.mention != other.mention:
+        if self.id != other.id:
             raise ValueError('Only roles for same booster can be subtracted!')
 
         if self.is_dps:
@@ -175,48 +180,49 @@ class Boost:
 
     def add_booster(self, booster):
         #TODO why this returns bool
-        #TODO add some temporary spot if no key is in boost
         if self.status != 'open':
-            return False
-
-        # edge case when there are 4 idiots without key signed
-        if len(self.boosters) == 4 and booster.is_keyholder and not booster.has_any_role() and self.temp_booster_slot is None and all([booster.mention != signed_booster.mention for signed_booster in self.boosters]):
-            LOG.debug('Adding temp booster %s', booster)
-            self.temp_booster_slot = booster
-            return True
-
-        if len(self.boosters) == 4 and booster.has_any_role() and self.temp_booster_slot is not None:
-            if self.temp_booster_slot.mention == booster.mention:
-                self.temp_booster_slot += booster
-
-                for booster_idx in range(3, -1, -1):
-                    temp_setup = [b for b in self.boosters]
-                    temp_setup[booster_idx] = self.temp_booster_slot
-                    if self.is_this_valid_setup(True, alternative_setup=temp_setup):
-                        self.boosters = temp_setup
-                        LOG.debug(f'{booster} used keyholder override.')
-                        return True
+            return
 
         for booster_idx, signed_booster in enumerate(self.boosters):
-            if signed_booster.mention == booster.mention:
+            if signed_booster.id == booster.id:
                 self.boosters[booster_idx] += booster
-                return True
+                return
 
         if len(self.boosters) < 4:
             self.boosters.append(booster)
             if not self.is_this_valid_setup():
                 self.boosters.pop(-1)
             else:
-                return True
+                return
 
-        return False
+        # keyholder override
+        if not any([signed_booster.is_keyholder for signed_booster in self.boosters]) and booster.is_keyholder and self.temp_booster_slot is None and all(
+                [booster.id != signed_booster.id for signed_booster in self.boosters]):
+            LOG.debug('Adding temp booster %s', booster)
+            self.temp_booster_slot = booster
+            self.temp_booster_clock = 2
+            return
+
+        if not any([signed_booster.is_keyholder for signed_booster in self.boosters]) and booster.has_any_role() and self.temp_booster_slot is not None:
+            if self.temp_booster_slot.id == booster.id:
+                self.temp_booster_slot += booster
+
+                for booster_idx in range(len(self.boosters) - 1, -1, -1):
+                    temp_setup = [b for b in self.boosters]
+                    temp_setup[booster_idx] = self.temp_booster_slot
+                    if self.is_this_valid_setup(True, alternative_setup=temp_setup):
+                        self.boosters = temp_setup
+                        LOG.debug(f'{booster} used keyholder override.')
+                        self.temp_booster_slot = None
+                        self.temp_booster_clock = 0
+                        return
 
     def remove_booster(self, booster: Booster):
         if self.status != 'open':
             return False
 
         for booster_idx, signed_booster in enumerate(self.boosters):
-            if signed_booster.mention == booster.mention:
+            if signed_booster.id == booster.id:
                 self.boosters[booster_idx] -= booster
 
                 if not self.is_this_valid_setup(True):
@@ -273,6 +279,15 @@ class Boost:
             else:
                 transactions[self.advertiser.mention] = adv_cut
 
+        embed.add_field(name='Pot', value=f'{self.pot:6,d}g', inline=True)
+        embed.add_field(name='Realm name', value=self.realm_name, inline=True)
+        embed.add_field(name='Dungeon key', value=self.key, inline=False)
+        embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=True)
+        embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6,.0f}g', inline=True)
+        embed.add_field(name='Advertiser cut kept', value=str(not self.include_advertiser_in_payout), inline=True)
+        if self.note is not None:
+            embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
+        # transaction info is expected last
         embed.add_field(name='Transactions to be processed:', value='\n'.join([f'{mention} {gold_sum}' for mention, gold_sum in transactions.items()]))
         return embed
 
@@ -282,7 +297,7 @@ class Boost:
         if self.blaster_only_clock > 0:
             self.blaster_only_clock -= 1
 
-        if self.team_take_clock > 0:
+        if self.team_take_clock > 0 and self.status == 'open':
             self.team_take_clock -= 1
             if self.team_take_clock == 0:
                 self.team_take = None

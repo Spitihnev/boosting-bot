@@ -7,7 +7,7 @@ def init():
     global open_boosts
     global unprocessed_transactions
     global known_roles
-
+    #TODO rewrite to remove global lock object
     global lock
 
     tracked_msgs = {}

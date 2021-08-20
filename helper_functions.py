@@ -158,7 +158,7 @@ async def query_user(client: discord.Client, query: str,  channel: discord.TextC
     await channel.send(query)
     try:
         msg = await client.wait_for('message', check=msg_author_check(author, channel), timeout=timeout)
-    except asyncio.exceptions.TimeoutError:
+    except asyncio.TimeoutError:
         if on_query_fail_msg is not None:
             await channel.send(on_query_fail_msg)
 

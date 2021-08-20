@@ -58,7 +58,8 @@ class BoostCallback(commands.Cog):
 
     @tasks.loop(seconds=5.0)
     async def update_boosts(self):
-        async with globals.lock:
+        #async with globals.lock:
+        try:
             for msg, boost_obj in globals.open_boosts.values():
                 async with boost_obj.lock:
                     old_tick = boost_obj.blaster_only_clock
@@ -73,6 +74,9 @@ class BoostCallback(commands.Cog):
                     if boost_obj.start_boost():
                         await msg.edit(embed=boost_obj.embed())
                         await msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]))
+        except RuntimeError:
+            #TODO make some nice fix not this shit
+            pass
 
     @update_boosts.before_loop
     async def before_update_boosts(self):
