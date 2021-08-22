@@ -60,8 +60,8 @@ class BoostCallback(commands.Cog):
     async def update_boosts(self):
         #async with globals.lock:
         try:
-            for msg, boost_obj in globals.open_boosts.values():
-                async with boost_obj.lock:
+            for msg, (boost_obj, lock) in globals.open_boosts.values():
+                async with lock:
                     old_tick = boost_obj.blaster_only_clock
                     should_update = boost_obj.clock_tick()
 

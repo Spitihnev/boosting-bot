@@ -1,10 +1,9 @@
-import asyncio
-
-import discord
 from dataclasses import dataclass
 from typing import List, Union
 import uuid
 import logging
+
+import discord
 
 from helper_functions import mention2id
 import config
@@ -78,13 +77,13 @@ class Boost:
     author_dc_id: int
     pot: int
     boost_author: str
-    advertiser: discord.Member
+    advertiser_mention: str
+    advertiser_display_name: str
     boosters: List[Booster]
     realm_name: str
     character_to_whisper: str
     key: str
     armor_stack: Union[discord.Role, str]
-    lock: Union[None, asyncio.Lock] = None
     pings: str = ''
     uuid: Union[str, None] = None
     boosts_number: int = 1
@@ -111,11 +110,6 @@ class Boost:
             self._mng_cut = cuts['default']['mng']
 
         self.past_team_takes = []
-        self.lock = asyncio.Lock()
-        #TODO this might not be useful
-        #blaster = globals.known_roles.get('blaster', '')
-        #if blaster:
-        #    self.pings += f' {blaster.mention}'
 
     @property
     def color(self):
@@ -138,7 +132,7 @@ class Boost:
         return self.armor_stack
 
     def embed(self):
-        embed = discord.Embed(title=self.advertiser.display_name, color=self.color)
+        embed = discord.Embed(title=self.advertiser_display_name, color=self.color)
         embed.set_thumbnail(url='https://logos-download.com/wp-content/uploads/2016/02/WOW_logo-700x701.png')
         embed.add_field(name='Pot', value=f'{self.pot:6,d}g', inline=True)
         embed.add_field(name='Booster cut', value=f'{(self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4):6,.0f}g', inline=True)
@@ -151,7 +145,7 @@ class Boost:
             embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
         if self.team_take is not None:
             embed.add_field(name='Team boost', value=self.team_take.mention, inline=False)
-        embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=True)
+        embed.add_field(name='Advertiser', value=self.advertiser_mention, inline=True)
         if self.include_advertiser_in_payout:
             embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6,.0f}g')
         embed.add_field(name='Character to whisper', value='/w ' + self.character_to_whisper, inline=True)
@@ -274,15 +268,15 @@ class Boost:
             transactions[booster.mention] = booster_cut
 
         if self.include_advertiser_in_payout:
-            if self.advertiser.mention in transactions:
-                transactions[self.advertiser.mention] += adv_cut
+            if self.advertiser_mention in transactions:
+                transactions[self.advertiser_mention] += adv_cut
             else:
-                transactions[self.advertiser.mention] = adv_cut
+                transactions[self.advertiser_mention] = adv_cut
 
         embed.add_field(name='Pot', value=f'{self.pot:6,d}g', inline=True)
         embed.add_field(name='Realm name', value=self.realm_name, inline=True)
         embed.add_field(name='Dungeon key', value=self.key, inline=False)
-        embed.add_field(name='Advertiser', value=self.advertiser.mention, inline=True)
+        embed.add_field(name='Advertiser', value=self.advertiser_mention, inline=True)
         embed.add_field(name='Advertiser cut', value=f'{(self.pot * self._adv_cut):6,.0f}g', inline=True)
         embed.add_field(name='Advertiser cut kept', value=str(not self.include_advertiser_in_payout), inline=True)
         if self.note is not None:

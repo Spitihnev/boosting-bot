@@ -6,6 +6,7 @@ from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument
 import traceback
 import asyncio
 from typing import Union
+import pickle
 
 from helper_functions import *
 from event_objects import Boost, Booster
@@ -52,7 +53,7 @@ if __name__ == '__main__':
                 LOG.debug(guild.id)
 
         await client.change_presence(activity=discord.Game(name='!help for commands'))
-        globals.init_discord_objects(client)
+        await globals.init_discord_objects(client)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -73,10 +74,13 @@ if __name__ == '__main__':
         #TODO save open boosts and unprocessed transactions
         global QUIT_CALLED
 
+        with open('cache.pickle', 'wb') as f:
+            pickle.dump(({(msg_obj.channel.id, msg_obj.id): boost for uuid, (msg_obj, (boost, _)) in globals.open_boosts.items()}, globals.unprocessed_transactions), f)
+
         await ctx.message.channel.send('Leaving...')
         QUIT_CALLED = True
         #to process anything in progress
-        await asyncio.sleep(15)
+        await asyncio.sleep(5)
         await client.logout()
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
@@ -444,6 +448,7 @@ if __name__ == '__main__':
         await send_channel_message(ctx.message.author, formatted_data if len(formatted_data) > 0 else 'There are no messages currently tracked.')
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
+
     @client.command('boost')
     @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
     async def boost(ctx, channel_mention, timeout: int = 120):
@@ -579,9 +584,9 @@ if __name__ == '__main__':
             await ctx.message.channel.send(f'Got no response in {timeout}s, canceling event creation.')
             return
 
-        boost_obj = Boost(author_dc_id=ctx.message.author.id, boost_author=ctx.message.author.nick, advertiser=advertiser, boosters=boosters_objects, realm_name=realm_name, armor_stack=armor_stack,
-                          pings=' '.join(parsed_pings), character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon, blaster_only_clock=blaster_resp,
-                          include_advertiser_in_payout=include_adv_cut, bigger_adv_cuts=bigger_adv_cuts)
+        boost_obj = Boost(author_dc_id=ctx.message.author.id, boost_author=ctx.message.author.nick, advertiser_mention=advertiser.mention, advertiser_display_name=advertiser.display_name, boosters=boosters_objects,
+                          realm_name=realm_name, armor_stack=armor_stack, pings=' '.join(parsed_pings), character_to_whisper=char_to_whisper, boosts_number=number_of_boosts, note=note, pot=gold_pot, key=dungeon,
+                          blaster_only_clock=blaster_resp, include_advertiser_in_payout=include_adv_cut, bigger_adv_cuts=bigger_adv_cuts)
 
         pings_msg = ''
         if boost_obj.pings or boost_obj.armor_stack != 'no':
@@ -597,7 +602,7 @@ if __name__ == '__main__':
         await boost_msg.add_reaction(config.get('emojis')['process'])
 
         #async with globals.lock:
-        globals.open_boosts[boost_obj.uuid] = (boost_msg, boost_obj)
+        globals.open_boosts[boost_obj.uuid] = (boost_msg, (boost_obj, asyncio.Lock()))
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -605,11 +610,11 @@ if __name__ == '__main__':
     @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
     async def edit_cmd(ctx, boost_id: str, timeout: int = 15):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
-        boost_msg, boost_obj = globals.open_boosts.get(boost_id, (None, None))
+        boost_msg, (boost_obj, lock) = globals.open_boosts.get(boost_id, (None, (None, None)))
         fixed_args = {'client': client, 'channel': ctx.channel, 'author': ctx.message.author, 'timeout': timeout, 'on_query_fail_msg': f'Failed to respond in {timeout}s, cancelling edit.'}
 
         if boost_obj is not None:
-            async with boost_obj.lock:
+            async with lock:
                 if boost_obj.status != 'closed':
                     msg = None
                     boost_obj.status = 'editing'
@@ -655,7 +660,8 @@ if __name__ == '__main__':
                                     if is_mention(msg.content):
                                         new_advertiser = ctx.guild.get_member(mention2id(msg.content))
                                         if new_advertiser:
-                                            boost_obj.advertiser = new_advertiser
+                                            boost_obj.advertiser_mention = new_advertiser.mention
+                                            boost_obj.advertiser_display_name = new_advertiser.display_name
                                         else:
                                             msg = None
                                     else:
@@ -739,7 +745,7 @@ if __name__ == '__main__':
     async def cancel(ctx, boost_id: str):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         #async with globals.lock:
-        boost_msg, boost_obj = globals.open_boosts.get(boost_id, (None, None))
+        boost_msg, (boost_obj, _) = globals.open_boosts.get(boost_id, (None, (None, None)))
         if boost_obj is not None:
             boost_obj.status = 'closed'
             globals.open_boosts.pop(boost_id)
@@ -756,9 +762,9 @@ if __name__ == '__main__':
             await ctx.message.channel.send(f'{booster_mention} is not a mention!')
             return
 
-        boost_msg, boost_obj = globals.open_boosts.get(boost_id, (None, None))
+        boost_msg, (boost_obj, lock) = globals.open_boosts.get(boost_id, (None, (None, None)))
         if boost_obj is not None:
-            async with boost_obj.lock:
+            async with lock:
                 for idx, booster in enumerate(boost_obj.boosters):
                     if booster.mention == booster_mention:
                         boost_obj.boosters.pop(idx)
@@ -808,9 +814,11 @@ if __name__ == '__main__':
 
     @client.command('test-cmd')
     @commands.is_owner()
-    async def test_cmd(ctx, mention: str):
-        if is_mention(mention):
-            LOG.debug('%s %s %s', mention, ctx.message.author.mention, mention == ctx.message.author.mention)
+    async def test_cmd(ctx, uuid: str):
+        _, (boost_obj, _) = globals.open_boosts[uuid]
+        obj_names = dir(boost_obj)
+        for obj_name in obj_names:
+            LOG.debug(boost_obj.__getattribute__(obj_name))
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -873,35 +881,41 @@ if __name__ == '__main__':
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
-    async def on_reaction_add(reaction, user):
+    async def on_raw_reaction_add(payload):
+        LOG.debug(payload)
+        user = payload.member
         if user.bot:
             return
 
+        emoji = payload.emoji
+        LOG.debug('Reaction added by %s', user.nick if user.nick else user.name)
+
         # tracking logic
-        msg_id = reaction.message.id
+        msg_id = payload.message_id
+        message = await payload.member.guild.get_channel(payload.channel_id).fetch_message(msg_id)
 
         if str(msg_id) in globals.tracked_msgs:
-            globals.tracked_msgs[str(msg_id)]['added'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+            globals.tracked_msgs[str(msg_id)]['added'].append((str(datetime.datetime.utcnow()), user.id, emoji if isinstance(emoji, str) else f'<:{emoji.name}:{emoji.id}>'))
 
         if msg_id in globals.unprocessed_transactions:
-            LOG.debug('Transaction reaction: %s', reaction.emoji)
+            LOG.debug('Transaction reaction: %s', emoji)
             yes_emoji = config.get('emojis', 'yes')
 
-            if reaction.emoji == yes_emoji and user_has_any_role(user.roles, ['Management']):
+            if emoji == yes_emoji and user_has_any_role(user.roles, ['Management']) or (config.get('debug', default=True) and user_has_any_role(user.roles, ['Tester'])):
 
-                #async with globals.lock:
+                # async with globals.lock:
                 # add transactions
-                LOG.debug(reaction.message.embeds[0].to_dict())
-                comment = reaction.message.embeds[0].to_dict()['title'].split()[1]
-                transaction_data = reaction.message.embeds[0].to_dict()['fields'][-1]
+                LOG.debug(message.embeds[0].to_dict())
+                comment = message.embeds[0].to_dict()['title'].split()[1]
+                transaction_data = message.embeds[0].to_dict()['fields'][-1]
 
                 results = []
                 for ln in transaction_data['value'].splitlines():
                     mention, amount = ln.split()
                     amount = amount.split('.')[0]
-                    nick = reaction.message.guild.get_member(mention2id(mention)).nick
+                    nick = payload.member.guild.get_member(mention2id(mention)).nick
                     if nick is None:
-                        nick = reaction.message.guild.get_member(mention2id(mention)).name
+                        nick = payload.member.guild.get_member(mention2id(mention)).name
 
                     usr = client.get_user(mention2id(mention))
                     try:
@@ -915,7 +929,7 @@ if __name__ == '__main__':
                         return
 
                     try:
-                        db_handling.add_tranaction('add', usr.id, user.id, int(amount), reaction.message.guild.id, comment)
+                        db_handling.add_tranaction('add', usr.id, user.id, int(amount), payload.member.guild.id, comment)
                     except BadArgument as e:
                         results.append(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
                         continue
@@ -926,15 +940,18 @@ if __name__ == '__main__':
 
                     results.append(f':white_check_mark:{mention}: Transaction with type add, amount {int(amount)} was processed.')
 
-                #TODO send to #attendance
-                attendance_channel = client.get_channel(config.get('channels', 'attendance'))
-                await send_channel_embed(attendance_channel, '\n'.join(results))
+                # TODO send to #attendance
+                if not config.get('debug', default=False):
+                    attendance_channel = client.get_channel(config.get('channels', 'attendance'))
+                    await send_channel_embed(attendance_channel, '\n'.join(results))
+                else:
+                    await send_channel_embed(message.channel, '\n'.join(results))
                 globals.unprocessed_transactions.pop(msg_id)
 
-        boost_uuid = msg_id2boost_uuid(reaction.message.id)
+        boost_uuid = msg_id2boost_uuid(msg_id)
         if boost_uuid is not None:
             # check if the emoji is one of used
-            id_or_emoji = reaction.emoji if isinstance(reaction.emoji, str) else reaction.emoji.id
+            id_or_emoji = emoji.id if emoji.id is not None else emoji.name
             found = False
             for emoji_name, emoji_id in config.get('emojis').items():
                 if id_or_emoji == emoji_id:
@@ -944,8 +961,8 @@ if __name__ == '__main__':
             if not found:
                 return
 
-            boost_msg, boost = globals.open_boosts[boost_uuid]
-            async with boost.lock:
+            boost_msg, (boost, lock) = globals.open_boosts[boost_uuid]
+            async with lock:
                 if emoji_name == 'team' and boost.team_take is None and user_has_any_role(user.roles, BOOSTER_RANKS) and boost.status == 'open':
                     team_role = None
                     for role in user.roles:
@@ -964,7 +981,7 @@ if __name__ == '__main__':
 
                         boosters_to_keep = []
                         for booster in boost.boosters:
-                            booster_dsc_user = reaction.message.guild.get_member(mention2id(booster.mention))
+                            booster_dsc_user = payload.member.guild.get_member(mention2id(booster.mention))
                             if booster_dsc_user is None:
                                 LOG.debug('Failed to get booster %s for boost %s', booster, boost.uuid)
                                 return
@@ -983,11 +1000,11 @@ if __name__ == '__main__':
 
                     if boost.team_take is not None and not user_has_any_role(user.roles, [boost.team_take.id]):
                         await user.send(f'This boost is currently reserved for {boost.team_take} team, wait {boost.team_take_clock * 5}s until it\'s open again.')
-                        await reaction.remove(user)
+                        await message.remove_reaction(emoji, user)
                         return
 
                     if boost.status != 'open':
-                        await reaction.remove(user)
+                        await message.remove_reaction(emoji, user)
                         return
 
                     armor_stack = boost.armor_stack
@@ -1000,62 +1017,77 @@ if __name__ == '__main__':
                         if (not user_has_any_role(user.roles, [armor_stack.id]) and emoji_name not in excluded_roles) and len(boost.boosters) != 4:
                             LOG.debug('%s %s %s', not user_has_any_role(user.roles, [armor_stack]), emoji_name not in excluded_roles, len(boost.boosters) != 4)
                             await user.send(f'You need to have {armor_stack.name} role to sign up for this boost!')
-                            await reaction.remove(user)
+                            await message.remove_reaction(emoji, user)
                             return
 
                     if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, ['SL Blaster']):
-                        await user.send(f'This boost is currently reserved for SL Blaster rank, wait {boost.blaster_only_clock* 5}s until it\'s open for Boosters.')
-                        await reaction.remove(user)
+                        await user.send(f'This boost is currently reserved for SL Blaster rank, wait {boost.blaster_only_clock * 5}s until it\'s open for Boosters.')
+                        await message.remove_reaction(emoji, user)
                         return
 
-                    if (not user_has_any_role(user.roles, ['DPS']) and emoji_name == 'dps') or (not user_has_any_role(user.roles, ['Healer']) and emoji_name == 'healer') or (not user_has_any_role(user.roles, ['Tank']) and emoji_name == 'tank'):
+                    if (not user_has_any_role(user.roles, ['DPS']) and emoji_name == 'dps') or (not user_has_any_role(user.roles, ['Healer']) and emoji_name == 'healer') or (
+                            not user_has_any_role(user.roles, ['Tank']) and emoji_name == 'tank'):
                         await user.send(f'You are missing {emoji_name} specialization role!')
-                        await reaction.remove(user)
+                        await message.remove_reaction(emoji, user)
                         return
 
+                    LOG.debug('Adding booster: %s', Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
                     boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
                     await boost_msg.edit(embed=boost.embed())
 
                 if user_has_any_role(user.roles, MNG_RANKS + ['Advertiser']) and emoji_name == 'process':
-                    boost_msg, boost = globals.open_boosts[boost_uuid]
+                    boost_msg, (boost, _) = globals.open_boosts[boost_uuid]
                     if boost.status == 'open' or boost.author_dc_id != user.id:
                         return
 
                     embed = boost.process()
                     if embed is not None:
-                        #TODO send to #post-run
-                        post_run_channel = client.get_channel(config.get('channels', 'post-run'))
-                        transaction_msg = await post_run_channel.send(embed=embed)
-                        await transaction_msg.add_reaction(config.get('emojis', 'yes'))
-                        #async with globals.lock:
+                        # TODO send to #post-run
+                        if not config.get('debug', default=False):
+                            post_run_channel = client.get_channel(config.get('channels', 'post-run'))
+                            transaction_msg = await post_run_channel.send(embed=embed)
+                            await transaction_msg.add_reaction(config.get('emojis', 'yes'))
+                        else:
+                            transaction_msg = await boost_msg.channel.send(embed=embed)
+                            await transaction_msg.add_reaction(config.get('emojis', 'yes'))
+                        # async with globals.lock:
                         globals.unprocessed_transactions[transaction_msg.id] = boost.uuid
 
-                    #async with globals.lock:
+                    # async with globals.lock:
                     globals.open_boosts.pop(boost_uuid)
+
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
 
     @client.event
-    async def on_reaction_remove(reaction, user):
+    async def on_raw_reaction_remove(payload):
+        user = await client.get_guild(payload.guild_id).fetch_member(payload.user_id)
         if user.bot:
             return
 
-        msg_id = str(reaction.message.id)
-        if msg_id in globals.tracked_msgs:
-            globals.tracked_msgs[msg_id]['removed'].append((str(datetime.datetime.utcnow()), user.id, reaction.emoji if isinstance(reaction.emoji, str) else f'<:{reaction.emoji.name}:{reaction.emoji.id}>'))
+        emoji = payload.emoji
+        LOG.debug('Reaction added by %s', user.nick if user.nick else user.name)
 
-        boost_uuid = msg_id2boost_uuid(reaction.message.id)
+        # tracking logic
+        msg_id = payload.message_id
+        message = await client.get_guild(payload.guild_id).get_channel(payload.channel_id).fetch_message(msg_id)
+
+        msg_id = str(message.id)
+        if msg_id in globals.tracked_msgs:
+            globals.tracked_msgs[msg_id]['removed'].append((str(datetime.datetime.utcnow()), user.id, emoji if isinstance(emoji, str) else f'<:{emoji.name}:{emoji.id}>'))
+
+        boost_uuid = msg_id2boost_uuid(message.id)
         if boost_uuid is not None:
             # check if the emoji is one of used
-            id_or_emoji = reaction.emoji if isinstance(reaction.emoji, str) else reaction.emoji.id
+            id_or_emoji = emoji.id if emoji.id is not None else emoji.name
             for emoji_name, emoji_id in config.get('emojis').items():
                 if id_or_emoji == emoji_id:
                     break
 
             if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
-                boost_msg, boost = globals.open_boosts[boost_uuid]
-                async with boost.lock:
+                boost_msg, (boost, lock) = globals.open_boosts[boost_uuid]
+                async with lock:
                     boost.remove_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
                     await boost_msg.edit(embed=boost.embed())
 
