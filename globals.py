@@ -43,7 +43,7 @@ async def init_discord_objects(client):
         with open('cache.pickle', 'rb') as f:
             open_boosts_data, unprocessed_transactions = pickle.load(f)
 
-        for (k1, k2), boost in open_boosts_data.items():
-            msg_obj = await client.get_channel(k1).fetch_message(k2)
+        for (channel_id, message_id), boost in open_boosts_data.items():
+            msg_obj = await client.get_channel(channel_id).fetch_message(message_id)
             LOG.debug('Boost msg: %s', msg_obj)
             open_boosts[boost.uuid] = (msg_obj, (boost, asyncio.Lock()))

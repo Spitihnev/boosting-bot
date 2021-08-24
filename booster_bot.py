@@ -882,7 +882,6 @@ if __name__ == '__main__':
 
     @client.event
     async def on_raw_reaction_add(payload):
-        LOG.debug(payload)
         user = payload.member
         if user.bot:
             return
@@ -901,7 +900,7 @@ if __name__ == '__main__':
             LOG.debug('Transaction reaction: %s', emoji)
             yes_emoji = config.get('emojis', 'yes')
 
-            if emoji == yes_emoji and user_has_any_role(user.roles, ['Management']) or (config.get('debug', default=True) and user_has_any_role(user.roles, ['Tester'])):
+            if (emoji.name == yes_emoji and user_has_any_role(user.roles, ['Management'])) or (config.get('debug', default=True) and user_has_any_role(user.roles, ['Tester'])):
 
                 # async with globals.lock:
                 # add transactions
