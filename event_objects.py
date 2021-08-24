@@ -269,17 +269,14 @@ class Boost:
             return
 
         embed = discord.Embed(title=f'Boost {self.uuid}')
-        transactions = {}
+        transactions = []
         booster_cut = self.pot * (1 - (self._adv_cut + self._mng_cut)) // 4
         adv_cut = self.pot * self._adv_cut
         for booster in self.boosters:
-            transactions[booster.mention] = booster_cut
+            transactions.append(f'{booster.mention} {booster_cut}')
 
         if self.include_advertiser_in_payout:
-            if self.advertiser_mention in transactions:
-                transactions[self.advertiser_mention] += adv_cut
-            else:
-                transactions[self.advertiser_mention] = adv_cut
+            transactions.append(f'{self.advertiser_mention} {adv_cut}')
 
         embed.add_field(name='Pot', value=f'{self.pot:6,d}g', inline=True)
         embed.add_field(name='Realm name', value=self.realm_name, inline=True)
@@ -290,7 +287,7 @@ class Boost:
         if self.note is not None:
             embed.add_field(name='Note', value=f'```{self.note}```', inline=False)
         # transaction info is expected last
-        embed.add_field(name='Transactions to be processed:', value='\n'.join([f'{mention} {gold_sum}' for mention, gold_sum in transactions.items()]))
+        embed.add_field(name='Transactions to be processed:', value='\n'.join([f'{transaction}' for transaction in transactions]))
         return embed
 
     def clock_tick(self):
