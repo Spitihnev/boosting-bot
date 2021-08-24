@@ -69,6 +69,12 @@ class Booster:
 
 
 @dataclass
+class DummyRole:
+    mention: str
+    name: str
+    id: int
+
+@dataclass
 class Boost:
     """
     Base abstract boost class
@@ -83,7 +89,7 @@ class Boost:
     realm_name: str
     character_to_whisper: str
     key: str
-    armor_stack: Union[discord.Role, str]
+    armor_stack: Union[discord.Role, str, DummyRole]
     pings: str = ''
     uuid: Union[str, None] = None
     boosts_number: int = 1
@@ -110,6 +116,8 @@ class Boost:
             self._mng_cut = cuts['default']['mng']
 
         self.past_team_takes = []
+        if self.armor_stack != 'no':
+            self.armor_stack = DummyRole(self.armor_stack.mention, self.armor_stack.name, self.armor_stack.id)
 
     @property
     def color(self):
@@ -310,3 +318,10 @@ class Boost:
             return True
 
         return False
+
+    def change_armor_stack(self, new_armor_role: discord.Role):
+        if new_armor_role == 'no':
+            self.armor_stack = new_armor_role
+            return
+
+        self.armor_stack = DummyRole(new_armor_role.mention, new_armor_role.name, new_armor_role.id)

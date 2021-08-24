@@ -81,7 +81,7 @@ if __name__ == '__main__':
         QUIT_CALLED = True
         #to process anything in progress
         await asyncio.sleep(5)
-        await client.logout()
+        await client.close()
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -694,7 +694,7 @@ if __name__ == '__main__':
                                 if is_mention(msg.content):
                                     role = ctx.message.guild.get_role(mention2id(msg.content))
                                     if role is not None and role.name in ('Cloth', 'Leather', 'Mail', 'Plate'):
-                                        boost_obj.armor_stack = role
+                                        boost_obj.change_armor_stack(role)
 
                         elif main_msg.content == 'realm':
                             while not msg:
@@ -1014,7 +1014,7 @@ if __name__ == '__main__':
                             excluded_roles.append('tank')
 
                         if (not user_has_any_role(user.roles, [armor_stack.id]) and emoji_name not in excluded_roles) and len(boost.boosters) != 4:
-                            LOG.debug('%s %s %s', not user_has_any_role(user.roles, [armor_stack]), emoji_name not in excluded_roles, len(boost.boosters) != 4)
+                            LOG.debug('%s %s %s', not user_has_any_role(user.roles, [armor_stack.id]), emoji_name not in excluded_roles, len(boost.boosters) != 4)
                             await user.send(f'You need to have {armor_stack.name} role to sign up for this boost!')
                             await message.remove_reaction(emoji, user)
                             return
