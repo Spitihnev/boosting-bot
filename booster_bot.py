@@ -7,6 +7,7 @@ import traceback
 import asyncio
 from typing import Union
 import pickle
+from datetime import datetime
 
 from helper_functions import *
 from event_objects import Boost, Booster
@@ -593,6 +594,8 @@ if __name__ == '__main__':
             pings_msg = f' {boost_obj.armor_stack_mention}' + boost_obj.pings if boost_obj.armor_stack != 'no' else boost_obj.pings
         boost_msg = await channel.send(pings_msg, embed=boost_obj.embed())
 
+        #async with globals.lock:
+        globals.open_boosts[boost_obj.uuid] = (boost_msg, (boost_obj, asyncio.Lock()))
         # reactions for controls
         await boost_msg.add_reaction(globals.emojis['tank'])
         await boost_msg.add_reaction(globals.emojis['healer'])
@@ -601,8 +604,6 @@ if __name__ == '__main__':
         await boost_msg.add_reaction(config.get('emojis')['team'])
         await boost_msg.add_reaction(config.get('emojis')['process'])
 
-        #async with globals.lock:
-        globals.open_boosts[boost_obj.uuid] = (boost_msg, (boost_obj, asyncio.Lock()))
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -786,46 +787,100 @@ if __name__ == '__main__':
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
-    @client.command('about')
-    async def print_info(ctx):
-        await ctx.message.channel.send(f'Key Blasters boosting bot version {__VERSION__}')
-
-# --------------------------------------------------------------------------------------------------------------------------------------------
-
     @client.command('test')
     @commands.has_any_role(*(MNG_RANKS + BOOSTER_RANKS))
     async def add_or_remove_tester_role(ctx):
         """
         Adds tester role if member does not have it or removes the tester role if already present.
         """
-        tester_role = None
-        for role in ctx.guild.roles:
-            if 'Tester' == role.name:
-                tester_role = role
-                break
+        tester_role = discord.utils.get(ctx.guild.roles, name="Tester")
 
         if any([tester_role.name == role.name for role in ctx.message.author.roles]):
             await ctx.message.author.remove_roles(tester_role)
         else:
             await ctx.message.author.add_roles(tester_role)
 
+    # --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('run-sql')
+    @commands.is_owner()
+    async def run_sql(ctx, sql: str):
+        sql = sql.lower()
+        if 'select' not in sql or any([db_str in sql for db_str in ('drop', 'create', 'alter', 'update', 'delete')]):
+            LOG.error('Exploit detected: %s', sql)
+            return
+
+        res = []
+        conn = db_handling._db_connect()
+        with conn as crs:
+            crs.execute(sql)
+
+            for row in crs:
+                res.append(str(tuple(row)))
+
+        await send_channel_message(ctx.channel, '\n'.join(res))
+
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+    @client.command('add-basic-roles')
+    @commands.is_owner()
+    async def add_basic_ranks(ctx, dry_run: bool = True):
+        basic_role = discord.utils.get(ctx.guild.roles, name="Member")
+
+        for member in ctx.guild.members:
+            if len(member.roles) == 1:
+                if dry_run:
+                    LOG.info('Adding rank for %s', member.name)
+                else:
+                    await member.add_roles(basic_role)
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+    @client.command('show-boost-ads')
+    @commands.has_any_role(*(MNG_RANKS + BOOSTER_RANKS))
+    async def add_or_remove_tester_role(ctx):
+        """
+        Adds member role if member does not have it or removes the member role if already present.
+        All ads should tag this rank.
+        """
+        member_role = discord.utils.get(ctx.guild.roles, name="Member")
+
+        if any([member_role.name == role.name for role in ctx.message.author.roles]):
+            await ctx.message.author.remove_roles(member_role)
+            await ctx.message.author.send('You have been successfully unsubscribed from ad channels.')
+        else:
+            await ctx.message.author.add_roles(member_role)
+            await ctx.message.author.send('You have been successfully subscribed to ad channels.')
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('test-cmd')
     @commands.is_owner()
-    async def test_cmd(ctx, uuid: str):
-        _, (boost_obj, _) = globals.open_boosts[uuid]
-        obj_names = dir(boost_obj)
-        for obj_name in obj_names:
-            LOG.debug(boost_obj.__getattribute__(obj_name))
+    async def test_cmd(ctx, foo: bool = True):
+        LOG.info(foo)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+    @client.event
+    async def on_member_join(member):
+        if len(member.roles) == 1:
+            basic_role = discord.utils.get(member.guild.roles, name="Member")
+            try:
+                await member.add_roles(basic_role)
+            except:
+                LOG.exception('Failed to add role for %s', member)
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.event
     async def on_member_update(before, after):
-        if len(after.roles) == 1 or before.nick == after.nick:
+        # only everyone role add Member role
+        if len(after.roles) == 1:
+            basic_role = discord.utils.get(after.guild.roles, name="Member")
+            await after.add_roles(basic_role)
+            return
+
+        if not user_has_any_role(after.roles, BOOSTER_RANKS + MNG_RANKS) or before.nick == after.nick:
             return
 
         to_check = None
@@ -900,7 +955,7 @@ if __name__ == '__main__':
             LOG.debug('Transaction reaction: %s', emoji)
             yes_emoji = config.get('emojis', 'yes')
 
-            if (emoji.name == yes_emoji and user_has_any_role(user.roles, ['Management'])) or (config.get('debug', default=True) and user_has_any_role(user.roles, ['Tester'])):
+            if (emoji.name == yes_emoji and user_has_any_role(user.roles, ['Management'])) or (config.get('debug', default=False) and user_has_any_role(user.roles, ['Tester'])):
 
                 # async with globals.lock:
                 # add transactions
@@ -946,6 +1001,8 @@ if __name__ == '__main__':
                 else:
                     await send_channel_embed(message.channel, '\n'.join(results))
                 globals.unprocessed_transactions.pop(msg_id)
+            elif emoji.name == yes_emoji and not user_has_any_role(user.roles, ['Management']):
+                await message.remove_reaction(emoji, user)
 
         boost_uuid = msg_id2boost_uuid(msg_id)
         if boost_uuid is not None:
@@ -1031,8 +1088,8 @@ if __name__ == '__main__':
                         return
 
                     LOG.debug('Adding booster: %s', Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
-                    boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
-                    await boost_msg.edit(embed=boost.embed())
+                    if boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True})):
+                        await boost_msg.edit(embed=boost.embed())
 
                 if user_has_any_role(user.roles, MNG_RANKS + ['Advertiser']) and emoji_name == 'process':
                     boost_msg, (boost, _) = globals.open_boosts[boost_uuid]
@@ -1066,7 +1123,7 @@ if __name__ == '__main__':
             return
 
         emoji = payload.emoji
-        LOG.debug('Reaction added by %s', user.nick if user.nick else user.name)
+        LOG.debug('Reaction removed by %s', user.nick if user.nick else user.name)
 
         # tracking logic
         msg_id = payload.message_id

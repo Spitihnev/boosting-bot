@@ -183,19 +183,19 @@ class Boost:
     def add_booster(self, booster):
         #TODO why this returns bool
         if self.status != 'open':
-            return
+            return False
 
         for booster_idx, signed_booster in enumerate(self.boosters):
             if signed_booster.id == booster.id:
                 self.boosters[booster_idx] += booster
-                return
+                return True
 
         if len(self.boosters) < 4:
             self.boosters.append(booster)
             if not self.is_this_valid_setup():
                 self.boosters.pop(-1)
             else:
-                return
+                return True
 
         # keyholder override
         if not any([signed_booster.is_keyholder for signed_booster in self.boosters]) and booster.is_keyholder and self.temp_booster_slot is None and all(
@@ -203,7 +203,7 @@ class Boost:
             LOG.debug('Adding temp booster %s', booster)
             self.temp_booster_slot = booster
             self.temp_booster_clock = 2
-            return
+            return False
 
         if not any([signed_booster.is_keyholder for signed_booster in self.boosters]) and booster.has_any_role() and self.temp_booster_slot is not None:
             if self.temp_booster_slot.id == booster.id:
@@ -217,7 +217,7 @@ class Boost:
                         LOG.debug(f'{booster} used keyholder override.')
                         self.temp_booster_slot = None
                         self.temp_booster_clock = 0
-                        return
+                        return True
 
     def remove_booster(self, booster: Booster):
         if self.status != 'open':

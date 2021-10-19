@@ -1,3 +1,4 @@
+import discord.errors
 from discord.ext import tasks, commands
 from datetime import datetime, timedelta
 import logging
@@ -5,7 +6,7 @@ import traceback
 
 import globals
 import booster_bot
-
+import config
 
 LOG = logging.getLogger(__name__)
 
@@ -74,9 +75,14 @@ class BoostCallback(commands.Cog):
                     if boost_obj.start_boost():
                         await msg.edit(embed=boost_obj.embed())
                         await msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]))
-        except RuntimeError:
+        except (RuntimeError, discord.errors.HTTPException):
+            LOG.exception('update_boosts exception! ')
+            await self.bot.get_user(config.get('my_id')).send(f'Cog exception: {traceback.format_exc()}')
             #TODO make some nice fix not this shit
-            pass
+
+        except Exception:
+            LOG.exception('Unknown exception in update_boosts!')
+            await self.bot.get_user(config.get('my_id')).send(f'Unknown cog exception:  {traceback.format_exc()}')
 
     @update_boosts.before_loop
     async def before_update_boosts(self):
