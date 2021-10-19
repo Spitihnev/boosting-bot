@@ -181,7 +181,9 @@ class Boost:
         return res_string
 
     def add_booster(self, booster):
-        #TODO why this returns bool
+        """
+        Returns should_edit value for boost embed
+        """
         if self.status != 'open':
             return False
 
