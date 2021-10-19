@@ -121,7 +121,7 @@ class Boost:
 
     @property
     def color(self):
-        if self.team_take is not None:
+        if self.team_take is not None and self.status == 'open':
             return discord.Color.gold()
 
         if self.status == 'open':
