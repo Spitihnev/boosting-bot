@@ -621,7 +621,7 @@ if __name__ == '__main__':
                     boost_obj.status = 'editing'
                     await boost_msg.edit(embed=boost_obj.embed())
 
-                    main_msg = await query_user(query='What property to edit? pot/key/advertiser/boosts number/armor stack/realm/char/note', **fixed_args)
+                    main_msg = await query_user(query='What property to edit? pot/key/advertiser/boosts number/armor stack/realm/w char/note', **fixed_args)
                     if main_msg is None:
                         boost_obj.status = 'open'
                         await boost_msg.edit(embed=boost_obj.embed())
@@ -746,7 +746,13 @@ if __name__ == '__main__':
     async def cancel(ctx, boost_id: str):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         #async with globals.lock:
-        boost_msg, (boost_obj, _) = globals.open_boosts.get(boost_id, (None, (None, None)))
+        try:
+            boost_msg, (boost_obj, _) = globals.open_boosts.get(boost_id, (None, (None, None)))
+        except discord.errors.NotFound:
+            LOG.error('Message with id %s no longer exists (404)', boost_id)
+            globals.open_boosts.pop(boost_id)
+            await ctx.message.channel.send(f'Boost {boost_id} cancelled.')
+            return
         if boost_obj is not None:
             boost_obj.status = 'closed'
             globals.open_boosts.pop(boost_id)
@@ -937,7 +943,10 @@ if __name__ == '__main__':
 
     @client.event
     async def on_raw_reaction_add(payload):
+        LOG.debug(payload)
         user = payload.member
+        if user is None:
+            user = client.get_user(payload.user_id)
         if user.bot:
             return
 
@@ -946,7 +955,14 @@ if __name__ == '__main__':
 
         # tracking logic
         msg_id = payload.message_id
-        message = await payload.member.guild.get_channel(payload.channel_id).fetch_message(msg_id)
+        channel = payload.member.guild.get_channel(payload.channel_id)
+        message = await channel.fetch_message(msg_id)
+
+        if isinstance(channel, discord.DMChannel) and emoji.name == config.get('emojis', 'yes'):
+            registration_channel = payload.member.guild.get_channel(861919086354366474)
+            if registration_channel:
+                LOG.info('Sending registration form from %s', f'{user.name}#{user.discriminator}')
+                await registration_channel.send(f'Registration from {user.name}#{user.discriminator} @ {datetime.datetime.now()}', embed=discord.Embed(title='', description=message.content))
 
         if str(msg_id) in globals.tracked_msgs:
             globals.tracked_msgs[str(msg_id)]['added'].append((str(datetime.datetime.utcnow()), user.id, emoji if isinstance(emoji, str) else f'<:{emoji.name}:{emoji.id}>'))
@@ -967,14 +983,22 @@ if __name__ == '__main__':
                 for ln in transaction_data['value'].splitlines():
                     mention, amount = ln.split()
                     amount = amount.split('.')[0]
-                    nick = payload.member.guild.get_member(mention2id(mention)).nick
-                    if nick is None:
+
+                    booster = payload.member.guild.get_member(mention2id(mention))
+                    if booster is None:
+                        LOG.warning(f'User {mention} no logner present in server!')
+                        continue
+
+                    if booster.nick is None:
                         nick = payload.member.guild.get_member(mention2id(mention)).name
+                    else:
+                        nick = booster.nick
 
                     usr = client.get_user(mention2id(mention))
                     try:
                         db_handling.add_user(usr.id, parse_nick2realm(nick))
                     except BadArgument as e:
+                        LOG.error(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
                         results.append(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
                         continue
                     except:
@@ -985,6 +1009,7 @@ if __name__ == '__main__':
                     try:
                         db_handling.add_tranaction('add', usr.id, user.id, int(amount), payload.member.guild.id, comment)
                     except BadArgument as e:
+                        LOG.error(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
                         results.append(f':x:{mention}: Transaction with type add, amount {int(amount)} failed: {e}.')
                         continue
                     except:
