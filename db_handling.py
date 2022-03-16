@@ -79,33 +79,6 @@ def add_tranaction(type, booster_id, transaction_author_id, amount, guild_id, co
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
-def add_boost(raw_boostee: str, advertisers: typing.List[discord.User], boosters:typing.List[discord.User], price: int, comment: str):
-    boostee, boostee_realm_name = raw_boostee.split('-')
-    boostee_realm_id = realm2id(boostee_realm_name)
-    advertisers_str = ','.join([db_user[0] for db_user in user_list2tuple(advertisers)])
-    boosters_str = ','.join([db_user[0] for db_user in user_list2tuple(boosters)])
-
-    with _db_connect() as crs:
-        try:
-            crs.execute('insert into boosts (`boostee`, `boostee_realm_id`, `advertisers`, `boosters`, `price`, `comment`) values (%s, %s, %s, %s, %s)', (boostee, boostee_realm_id, advertisers_str, boosters_str, price, comment))
-        except:
-            raise DatabaseError(f'Failed to add boost, last_query: {crs._last_executed}, {traceback.format_exc()}')
-
-    advertiser_price = int(amount * config.get('adv_cut') / len(advertisers))
-    managment_price = int(amount * config.get('mng_cut') / len(config.get('managers')))
-    booster_price = int(amount * (1 - config.get('adv_cut') - config.get('mng_cut')) / len(boosters))
-
-    for advertiser in advertisers_str.split(','):
-        add_tranaction('add', int(advertiser), advertiser_price, boostee_realm_id, comment='advertiser cut')
-
-    for manager in config.get('managment'):
-        add_tranaction('add', manager, managment_price, boostee_realm_id, comment='managment cut')
-
-    for booster in boosters_str.split(','):
-        add_tranaction('add', booster, booster_price, boostee_realm_id, comment='booster cut')
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
 def get_realm_balance(realm_name, dsc_id):
     realm_id = realm_name2id(realm_name)
     all_transactions = []

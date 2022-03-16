@@ -18,8 +18,10 @@ import globals
 import cogs
 
 #TODO move to a better place
-BOOSTER_RANKS = ['M+Booster', 'M+Blaster', 'Advertiser', 'Trial Advertiser', 'Alliance Booster', 'SL Booster', 'SL Blaster']
-MNG_RANKS = ['Management', 'Support']
+#BOOSTER_RANKS = ['M+Booster', 'Staff', 'Trial', 'Alliance Booster', 'SL Booster', 'SL Blaster']
+BOOSTER_RANKS = [707893146419200070, 707850979059564554, 817901110152921109, 804838552625217619, 790528382588157962, 662359128521310288]
+#MNG_RANKS = ['Management', 'Support']
+MNG_RANKS = [706853081178046524, 756582609232068668]
 if config.get('debug', default=False):
     MNG_RANKS.append('Tester')
 __VERSION__ = config.get('version')
@@ -451,7 +453,7 @@ if __name__ == '__main__':
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('boost')
-    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    @commands.has_any_role(*(MNG_RANKS + [707850979059564554]))
     async def boost(ctx, channel_mention, timeout: int = 120):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         #TODO what about alliance?
@@ -608,7 +610,7 @@ if __name__ == '__main__':
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('edit')
-    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    @commands.has_any_role(*(MNG_RANKS + [707850979059564554]))
     async def edit_cmd(ctx, boost_id: str, timeout: int = 15):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         boost_msg, (boost_obj, lock) = globals.open_boosts.get(boost_id, (None, (None, None)))
@@ -742,7 +744,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('cancel')
-    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    @commands.has_any_role(*(MNG_RANKS + [707850979059564554]))
     async def cancel(ctx, boost_id: str):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         #async with globals.lock:
@@ -762,7 +764,7 @@ if __name__ == '__main__':
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
     @client.command('kick')
-    @commands.has_any_role(*(MNG_RANKS + ['Advertiser']))
+    @commands.has_any_role(*(MNG_RANKS + [707850979059564554]))
     async def kick(ctx, boost_id: str, booster_mention: str):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         if not is_mention(booster_mention):
@@ -863,7 +865,8 @@ if __name__ == '__main__':
     @client.command('test-cmd')
     @commands.is_owner()
     async def test_cmd(ctx, foo: bool = True):
-        LOG.info(foo)
+        for role in ctx.guild.roles:
+            LOG.info('%s %s', role.name, role.id)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -971,7 +974,7 @@ if __name__ == '__main__':
             LOG.debug('Transaction reaction: %s', emoji)
             yes_emoji = config.get('emojis', 'yes')
 
-            if (emoji.name == yes_emoji and user_has_any_role(user.roles, ['Management'])) or (config.get('debug', default=False) and user_has_any_role(user.roles, ['Tester'])):
+            if (emoji.name == yes_emoji and user_has_any_role(user.roles, [706853081178046524])) or (config.get('debug', default=False) and user_has_any_role(user.roles, ['Tester'])):
 
                 # async with globals.lock:
                 # add transactions
@@ -1026,7 +1029,7 @@ if __name__ == '__main__':
                 else:
                     await send_channel_embed(message.channel, '\n'.join(results))
                 globals.unprocessed_transactions.pop(msg_id)
-            elif emoji.name == yes_emoji and not user_has_any_role(user.roles, ['Management']):
+            elif emoji.name == yes_emoji and not user_has_any_role(user.roles, [706853081178046524]):
                 await message.remove_reaction(emoji, user)
 
         boost_uuid = msg_id2boost_uuid(msg_id)
@@ -1101,7 +1104,7 @@ if __name__ == '__main__':
                             await message.remove_reaction(emoji, user)
                             return
 
-                    if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, ['SL Blaster']):
+                    if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, [662359128521310288]):
                         await user.send(f'This boost is currently reserved for SL Blaster rank, wait {boost.blaster_only_clock * 5}s until it\'s open for Boosters.')
                         await message.remove_reaction(emoji, user)
                         return
@@ -1116,7 +1119,7 @@ if __name__ == '__main__':
                     if boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True})):
                         await boost_msg.edit(embed=boost.embed())
 
-                if user_has_any_role(user.roles, MNG_RANKS + ['Advertiser']) and emoji_name == 'process':
+                if user_has_any_role(user.roles, MNG_RANKS + [707850979059564554]) and emoji_name == 'process':
                     boost_msg, (boost, _) = globals.open_boosts[boost_uuid]
                     if boost.status == 'open' or boost.author_dc_id != user.id:
                         return
