@@ -34,9 +34,9 @@ async def init_discord_objects(client):
 
     #TODO ugly
     keyblasters_roles = [guild for guild in client.guilds if guild.id == 442319306030710785][0].roles
-    known_roles = {'blaster': [role for role in keyblasters_roles if role.name == 'SL Blaster'][0],
-                   'booster': [role for role in keyblasters_roles if role.name == 'SL Booster'][0],
-                   'alliance_booster': [role for role in keyblasters_roles if role.name == 'Alliance Booster'][0]
+    known_roles = {'blaster': [role for role in keyblasters_roles if role.id == 662359128521310288][0],
+                   'booster': [role for role in keyblasters_roles if role.id == 790528382588157962][0],
+                   'alliance_booster': [role for role in keyblasters_roles if role.id == 804838552625217619][0]
                    }
 
     if os.path.exists('cache.pickle'):

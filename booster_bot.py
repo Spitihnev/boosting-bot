@@ -23,7 +23,8 @@ BOOSTER_RANKS = [707893146419200070, 707850979059564554, 817901110152921109, 804
 #MNG_RANKS = ['Management', 'Support']
 MNG_RANKS = [706853081178046524, 756582609232068668]
 if config.get('debug', default=False):
-    MNG_RANKS.append('Tester')
+    #tester rank
+    MNG_RANKS.append(835892359651917834)
 __VERSION__ = config.get('version')
 
 if __name__ == '__main__':
@@ -416,39 +417,20 @@ if __name__ == '__main__':
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
-    @client.command('track')
+    @client.command('payout')
     @commands.has_any_role(*MNG_RANKS)
-    async def track(ctx, msg_url: str, track_for: int = 24):
-        """
-        Starts reactions tracking (added or removed by users) for limited amount of time (hours). You can get message URL by opening extra menu by right-clicking on specific message.
-        For mobile users enabling developer mode is needed to see the "copy URL" option.
-        """
-        _, g_id, ch_id, msg_id = msg_url.rsplit('/', 3)
-        if msg_id not in globals.tracked_msgs:
-            globals.tracked_msgs[msg_id] = {'added': [], 'removed': [], 'author_id': ctx.message.author.id, 'guild_id': ctx.guild.id, 'limit': track_for, 'track_start': str(datetime.datetime.utcnow()), 'url': msg_url}
+    async def payout(ctx):
+        results = db_handling.execute_end_cycle(ctx.guild.id, ctx.message.author.id)
+        results_str = '------ END OF CYCLE TRANSACTIONS PROCESSED ------\n'
+        for user_id, result in results:
+            member = ctx.guild.get_member(user_id)
+            member_mention = member.mention if member is not None else user_id
+            if result == 'failed':
+                results_str += f'{member_mention} failed to process\n'
+            else:
+                results_str += f'{member_mention} {result}g\n'
 
-        # to be addedd in ver1.5
-        # msg_ref = discord.MessageReference(message_id=msg_id, guild_id=g_id, channel_id=ch_id)
-        await ctx.message.author.send(f'{msg_url}\n Tracking started for {track_for} hours.')
-
-# --------------------------------------------------------------------------------------------------------------------------------------------
-
-    @client.command('list-tracked')
-    @commands.has_any_role(*MNG_RANKS)
-    async def list_tracked(ctx, msg_url: str = None):
-        """
-        Lists all currently tracked messages. By supplying specific message url as additional argument only specific message tracking info is displayed.
-        """
-        LOG.debug(globals.tracked_msgs)
-
-        if msg_url is not None:
-            data = {msg_url.rsplit('/', 1)[1]: globals.tracked_msgs.get(msg_url.rsplit('/', 1)[1], {})}
-        else:
-            data = globals.tracked_msgs
-
-        formatted_data = format_tracking_data(data, ctx.guild)
-
-        await send_channel_message(ctx.message.author, formatted_data if len(formatted_data) > 0 else 'There are no messages currently tracked.')
+        await send_channel_message(ctx.message.channel, results_str)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 

@@ -67,6 +67,26 @@ def list_top_boosters(limit, guild_id, realm_name=None):
     
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
+def execute_end_cycle(guild_id, author_id):
+    payout = {}
+    results = []
+    with _db_connect() as crs:
+        crs.execute('select sum(amount) as s, booster_id from transactions where guild_id=%s and booster_id in (select dsc_id from users) group by booster_id having s > 0 order by s desc', guild_id)
+        for amount, dsc_id in crs:
+            payout[dsc_id] = amount
+
+        for booster_id, amount in payout.items():
+            try:
+                add_tranaction('payout', booster_id, author_id, amount, guild_id)
+                results.append((booster_id, amount))
+            except DatabaseError as e:
+                LOG.error('Payout exception %s', e)
+                results.append((booster_id, 'failed'))
+
+    return results
+
+#--------------------------------------------------------------------------------------------------------------------------------------------
+
 def add_tranaction(type, booster_id, transaction_author_id, amount, guild_id, comment=None):
     if type in ('deduct', 'payout'):
         amount  = -amount
