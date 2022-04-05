@@ -57,7 +57,8 @@ if __name__ == '__main__':
                 LOG.debug(guild.id)
 
         await client.change_presence(activity=discord.Game(name='!help for commands'))
-        await globals.init_discord_objects(client)
+        if not globals.loaded:
+            await globals.init_discord_objects(client)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 

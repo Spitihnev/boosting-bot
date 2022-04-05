@@ -14,12 +14,14 @@ def init():
     global known_roles
     #TODO rewrite to remove global lock object
     global lock
+    global loaded
 
     tracked_msgs = {}
     open_boosts = {}
     unprocessed_transactions = {}
     lock = asyncio.Lock()
     known_roles = {}
+    loaded = False
 
 
 async def init_discord_objects(client):
@@ -27,6 +29,7 @@ async def init_discord_objects(client):
     global known_roles
     global open_boosts
     global unprocessed_transactions
+    global loaded
 
     emojis = {'dps': client.get_emoji(config.get('emojis', 'dps')),
               'tank': client.get_emoji(config.get('emojis', 'tank')),
@@ -50,3 +53,5 @@ async def init_discord_objects(client):
                 open_boosts[boost.uuid] = (msg_obj, (boost, asyncio.Lock()))
             except:
                 LOG.error('Failed to load boost message from channel: %s msg_id: %s for boost %s', channel_id, message_id, boost)
+
+    loaded = True
