@@ -778,6 +778,18 @@ if __name__ == '__main__':
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+    @client.command('add-post-run')
+    @commands.is_owner()
+    async def add_post_run(ctx, msg_id):
+        channel = client.get_channel(config.get('channels', 'post-run'))
+        msg = await channel.fetch_message(msg_id)
+        title = msg.embeds[0].to_dict().get('title')
+        if title:
+            uuid = title.split()[1]
+            globals.unprocessed_transactions[msg_id] = uuid
+
+    # --------------------------------------------------------------------------------------------------------------------------------------------
+
     @client.command('test')
     @commands.has_any_role(*(MNG_RANKS + BOOSTER_RANKS))
     async def add_or_remove_tester_role(ctx):
