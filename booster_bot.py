@@ -77,7 +77,6 @@ if __name__ == '__main__':
     @client.command(name='quit')
     @commands.is_owner()
     async def shutdown(ctx):
-        #TODO save open boosts and unprocessed transactions
         global QUIT_CALLED
 
         with open('cache.pickle', 'wb') as f:
@@ -440,7 +439,6 @@ if __name__ == '__main__':
     @commands.has_any_role(*(MNG_RANKS + [707850979059564554]))
     async def boost(ctx, channel_mention, timeout: int = 120):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
-        #TODO what about alliance?
         #TODO validate dungeon names
         if not is_mention(channel_mention):
             raise BadArgument(f'{channel_mention} is not a channel mention!')
@@ -909,7 +907,6 @@ if __name__ == '__main__':
 
                     results.append(f':white_check_mark:{mention}: Transaction with type add, amount {int(amount)} was processed.')
 
-                # TODO send to #attendance
                 if not config.get('debug', default=False):
                     attendance_channel = client.get_channel(config.get('channels', 'attendance'))
                     await send_channel_embed(attendance_channel, '\n'.join(results))
@@ -1013,7 +1010,6 @@ if __name__ == '__main__':
 
                     embed = boost.process()
                     if embed is not None:
-                        # TODO send to #post-run
                         if not config.get('debug', default=False):
                             post_run_channel = client.get_channel(config.get('channels', 'post-run'))
                             transaction_msg = await post_run_channel.send(embed=embed)
