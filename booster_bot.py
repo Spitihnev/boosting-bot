@@ -16,10 +16,11 @@ import db_handling
 import constants
 import globals
 import cogs
+from custom_commands import edit_boost
 
 #TODO move to a better place
 #BOOSTER_RANKS = ['M+Booster', 'Staff', 'Trial', 'Alliance Booster', 'SL Booster', 'SL Blaster']
-BOOSTER_RANKS = [707893146419200070, 707850979059564554, 817901110152921109, 804838552625217619, 790528382588157962, 662359128521310288]
+BOOSTER_RANKS = [707893146419200070, 707850979059564554, 817901110152921109, 804838552625217619, 790528382588157962, 1004889816443392000]
 #MNG_RANKS = ['Management', 'Support']
 MNG_RANKS = [706853081178046524, 756582609232068668]
 if config.get('debug', default=False):
@@ -597,132 +598,23 @@ if __name__ == '__main__':
     async def edit_cmd(ctx, boost_id: str, timeout: int = 15):
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         boost_msg, (boost_obj, lock) = globals.open_boosts.get(boost_id, (None, (None, None)))
-        fixed_args = {'client': client, 'channel': ctx.channel, 'author': ctx.message.author, 'timeout': timeout, 'on_query_fail_msg': f'Failed to respond in {timeout}s, cancelling edit.'}
 
         if boost_obj is not None:
             async with lock:
                 if boost_obj.status != 'closed':
-                    msg = None
-                    boost_obj.status = 'editing'
-                    await boost_msg.edit(embed=boost_obj.embed())
+                    await edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout)
 
-                    main_msg = await query_user(query='What property to edit? pot/key/advertiser/boosts number/armor stack/realm/w char/note', **fixed_args)
-                    if main_msg is None:
-                        boost_obj.status = 'open'
-                        await boost_msg.edit(embed=boost_obj.embed())
-                        return
+    # --------------------------------------------------------------------------------------------------------------------------------------------
 
-                    if main_msg.content in ('pot', 'key', 'advertiser', 'boosts number', 'armor stack', 'realm', 'w char', 'note'):
+    @client.command('aedit')
+    @commands.has_any_role(*MNG_RANKS)
+    async def admin_edit_cmd(ctx, boost_id: str, timeout: int = 15):
+        LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
+        boost_msg, (boost_obj, lock) = globals.open_boosts.get(boost_id, (None, (None, None)))
 
-                        msg = None
-                        if main_msg.content == 'pot':
-                            new_pot = None
-                            while not new_pot:
-                                msg = await query_user(query='New pot amount?', **fixed_args)
-                                if msg is None:
-                                    break
-
-                                new_pot = gold_str2int(msg.content)
-                                if new_pot > 2 ** 31 - 1:
-                                    await ctx.channel.send('Only amounts between -2147483647 and 2147483647 are accepted.')
-                                    continue
-
-                                boost_obj.pot = new_pot
-
-                        elif main_msg.content == 'key':
-                            while not msg:
-                                msg = await query_user(query='New key?', **fixed_args)
-                                if not msg:
-                                    break
-                                else:
-                                    boost_obj.key = msg.content
-
-                        elif main_msg.content == 'advertiser':
-                            while not msg:
-                                msg = await query_user(query='New advertiser?', **fixed_args)
-                                if not msg:
-                                    break
-                                else:
-                                    if is_mention(msg.content):
-                                        new_advertiser = ctx.guild.get_member(mention2id(msg.content))
-                                        if new_advertiser:
-                                            boost_obj.advertiser_mention = new_advertiser.mention
-                                            boost_obj.advertiser_display_name = new_advertiser.display_name
-                                        else:
-                                            msg = None
-                                    else:
-                                        msg = None
-
-                        elif main_msg.content == 'boosts number':
-                            while msg is None:
-                                msg = await query_user(query='New number of boosts?', **fixed_args)
-                                if msg is None:
-                                    break
-
-                                try:
-                                    num_boosts = int(msg.content)
-                                except:
-                                    await ctx.channel.send(f'{msg.content} is not a number!')
-                                    msg = None
-                                    continue
-
-                                boost_obj.boosts_number = num_boosts
-
-                        elif main_msg.content == 'armor stack':
-                            while msg is None:
-                                msg = await query_user(query='New armor stack?', **fixed_args)
-                                if msg is None:
-                                    break
-
-                                if msg.content == 'no':
-                                    boost_obj.armor_stack = msg.content
-
-                                if is_mention(msg.content):
-                                    role = ctx.message.guild.get_role(mention2id(msg.content))
-                                    if role is not None and role.name in ('Cloth', 'Leather', 'Mail', 'Plate'):
-                                        boost_obj.change_armor_stack(role)
-
-                        elif main_msg.content == 'realm':
-                            while not msg:
-                                msg = await query_user(query='New realm name?', **fixed_args)
-                                if not msg:
-                                    break
-
-                                try:
-                                    realm_name = constants.is_valid_realm(msg.content, True)
-                                except BadArgument as e:
-                                    await ctx.channel.send(e)
-                                    continue
-
-                                boost_obj.realm_name = realm_name
-
-                        elif main_msg.content == 'w char':
-                            while not msg:
-                                msg = await query_user(query='New character to whisper?', **fixed_args)
-                                if not msg:
-                                    break
-                                else:
-                                    boost_obj.character_to_whisper = msg.content
-
-                        elif main_msg.content == 'note':
-                            while not msg:
-                                msg = await query_user(query='New note?', **fixed_args)
-                                if not msg:
-                                    break
-                                else:
-                                    boost_obj.note = msg.content
-
-                        else:
-                            await ctx.channel.send('Unknown value to edit!')
-
-                    else:
-                        await ctx.channel.send('Unknown value to edit!')
-
-                    boost_obj.status = 'open'
-                    await boost_msg.edit(embed=boost_obj.embed())
-                    if msg is not None:
-                        await ctx.message.channel.send(f'Boost {boost_id} edited.')
-
+        if boost_obj is not None:
+            async with lock:
+                await edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout)
 
     # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1099,7 +991,7 @@ if __name__ == '__main__':
                             await message.remove_reaction(emoji, user)
                             return
 
-                    if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, [662359128521310288]):
+                    if boost.blaster_only_clock > 0 and not user_has_any_role(user.roles, [1004889816443392000]):
                         await user.send(f'This boost is currently reserved for SL Blaster rank, wait {boost.blaster_only_clock * 5}s until it\'s open for Boosters.')
                         await message.remove_reaction(emoji, user)
                         return
