@@ -6,13 +6,12 @@ async def edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout):
     orig_boost_status = boost_obj.status
     boost_obj.status = 'editing'
     fixed_args = {'client': client, 'channel': ctx.channel, 'author': ctx.message.author, 'timeout': timeout, 'on_query_fail_msg': f'Failed to respond in {timeout}s, cancelling edit.'}
-    await boost_msg.edit(embed=boost_obj.embed())
+    boost_msg = await boost_msg.edit(embed=boost_obj.embed())
 
     main_msg = await query_user(query='What property to edit? pot/key/advertiser/boosts number/armor stack/realm/w char/note', **fixed_args)
     if main_msg is None:
         boost_obj.status = 'open'
-        await boost_msg.edit(embed=boost_obj.embed())
-        return
+        return await boost_msg.edit(embed=boost_obj.embed())
 
     if main_msg.content in ('pot', 'key', 'advertiser', 'boosts number', 'armor stack', 'realm', 'w char', 'note'):
 
@@ -121,6 +120,7 @@ async def edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout):
         await ctx.channel.send('Unknown value to edit!')
 
     boost_obj.status = orig_boost_status
-    await boost_msg.edit(embed=boost_obj.embed())
+    boost_msg = await boost_msg.edit(embed=boost_obj.embed())
     if msg is not None:
         await ctx.message.channel.send(f'Boost {boost_id} edited.')
+        return boost_msg

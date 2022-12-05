@@ -37,7 +37,9 @@ if __name__ == '__main__':
     intents = discord.Intents.default()
     intents.members = True
     intents.emojis = True
-    intents.reactions = True
+    intents.guild_reactions = True
+    intents.guild_messages = True
+    intents.message_content = True
 
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)-23s %(name)-12s %(levelname)-8s %(message)s')
     handler = handlers.RotatingFileHandler(config.get('log_path'), maxBytes=50 * 2 ** 20, backupCount=10, encoding='utf-8')
@@ -603,7 +605,8 @@ if __name__ == '__main__':
         if boost_obj is not None:
             async with lock:
                 if boost_obj.status != 'closed':
-                    await edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout)
+                    boost_msg = await edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout)
+                    globals.open_boosts[boost_id] = boost_msg, (boost_obj, lock)
 
     # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -615,7 +618,8 @@ if __name__ == '__main__':
 
         if boost_obj is not None:
             async with lock:
-                await edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout)
+                boost_msg = await edit_boost(ctx, boost_obj, boost_msg, boost_id, client, timeout)
+                globals.open_boosts[boost_id] = boost_msg, (boost_obj, lock)
 
     # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -625,7 +629,7 @@ if __name__ == '__main__':
         LOG.debug(f'{ctx.message.author}: {ctx.message.content}')
         #async with globals.lock:
         try:
-            boost_msg, (boost_obj, _) = globals.open_boosts.get(boost_id, (None, (None, None)))
+            boost_msg, (boost_obj, lock) = globals.open_boosts.get(boost_id, (None, (None, None)))
         except discord.errors.NotFound:
             LOG.error('Message with id %s no longer exists (404)', boost_id)
             globals.open_boosts.pop(boost_id)
@@ -655,7 +659,8 @@ if __name__ == '__main__':
                         boost_obj.boosters.pop(idx)
                         break
 
-                await boost_msg.edit(embed=boost_obj.embed())
+                edited_boost_msg = await boost_msg.edit(embed=boost_obj.embed())
+                globals.open_boosts[boost_id] = edited_boost_msg, (boost_obj, lock)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -962,8 +967,9 @@ if __name__ == '__main__':
                         boost.boosters = boosters_to_keep
 
                         LOG.debug(f'{boost_uuid} taken by {team_role.name}!')
-                        await boost_msg.edit(embed=boost.embed())
-                        await boost_msg.channel.send(team_role.mention)
+                        edited_boost_msg = await boost_msg.edit(embed=boost.embed())
+                        globals.open_boosts[boost_uuid] = edited_boost_msg, (boost, lock)
+                        await edited_boost_msg.channel.send(team_role.mention)
                         return
 
                 if user_has_any_role(user.roles, BOOSTER_RANKS) and emoji_name in ('dps', 'tank', 'healer', 'keyholder'):
@@ -1004,7 +1010,8 @@ if __name__ == '__main__':
 
                     LOG.debug('Adding booster: %s', Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
                     if boost.add_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True})):
-                        await boost_msg.edit(embed=boost.embed())
+                        edited_boost_msg = await boost_msg.edit(embed=boost.embed())
+                        globals.open_boosts[boost_uuid] = edited_boost_msg, (boost, lock)
 
                 if user_has_any_role(user.roles, MNG_RANKS + [707850979059564554]) and emoji_name == 'process':
                     boost_msg, (boost, _) = globals.open_boosts[boost_uuid]
@@ -1059,12 +1066,17 @@ if __name__ == '__main__':
                 boost_msg, (boost, lock) = globals.open_boosts[boost_uuid]
                 async with lock:
                     boost.remove_booster(Booster(mention=user.mention, **{'is_{}'.format(emoji_name): True}))
-                    await boost_msg.edit(embed=boost.embed())
+                    edited_boost_msg = await boost_msg.edit(embed=boost.embed())
+                    globals.open_boosts[boost_uuid] = edited_boost_msg, (boost, lock)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
 
+async def post_setup(client):
+    await client.add_cog(cogs.TrackerCallback(client))
+    await client.add_cog(cogs.BoostCallback(client))
+
+
 if __name__ == '__main__':
-    client.add_cog(cogs.TrackerCallback(client))
-    client.add_cog(cogs.BoostCallback(client))
+    asyncio.run(post_setup(client))
     client.run(config.get('token'))

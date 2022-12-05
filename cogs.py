@@ -62,7 +62,7 @@ class BoostCallback(commands.Cog):
     async def update_boosts(self):
         #async with globals.lock:
         try:
-            for msg, (boost_obj, lock) in globals.open_boosts.values():
+            for boost_uuid, (msg, (boost_obj, lock)) in globals.open_boosts.items():
                 async with lock:
                     old_tick = boost_obj.blaster_only_clock
                     should_update = boost_obj.clock_tick()
@@ -72,10 +72,12 @@ class BoostCallback(commands.Cog):
                         await msg.channel.send(f'Boost {boost_obj.uuid} now open for {booster.mention}')
 
                     if should_update:
-                        await msg.edit(embed=boost_obj.embed())
+                        edited_msg = await msg.edit(embed=boost_obj.embed())
+                        globals.open_boosts[boost_uuid] = edited_msg, (boost_obj, lock)
                     if boost_obj.start_boost():
-                        await msg.edit(embed=boost_obj.embed())
-                        await msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]))
+                        edited_msg = await msg.edit(embed=boost_obj.embed())
+                        globals.open_boosts[boost_uuid] = edited_msg, (boost_obj, lock)
+                        await edited_msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]))
         except (RuntimeError, discord.errors.HTTPException):
             LOG.exception('update_boosts exception! ')
             await self.bot.get_user(config.get('my_id')).send(f'Cog exception: {traceback.format_exc()}')
