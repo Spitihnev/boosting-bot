@@ -1,13 +1,14 @@
 import logging
 from logging import handlers
-import discord
-from discord.ext import commands
-from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument, MissingAnyRole
 import traceback
 import asyncio
 from typing import Union
 import pickle
 from datetime import datetime
+
+import discord
+from discord.ext import commands
+from discord.ext.commands.errors import CommandNotFound, MissingRequiredArgument, BadArgument, MissingAnyRole
 
 from helper_functions import *
 from event_objects import Boost, Booster
@@ -18,15 +19,17 @@ import globals
 import cogs
 from custom_commands import edit_boost
 
-#TODO move to a better place
-#BOOSTER_RANKS = ['M+Booster', 'Staff', 'Trial', 'Alliance Booster', 'SL Booster', 'SL Blaster']
+
+# TODO move to a better place
+# BOOSTER_RANKS = ['M+Booster', 'Staff', 'Trial', 'Alliance Booster', 'SL Booster', 'SL Blaster']
 BOOSTER_RANKS = [707893146419200070, 707850979059564554, 817901110152921109, 804838552625217619, 790528382588157962, 1004889816443392000]
-#MNG_RANKS = ['Management', 'Support']
+# MNG_RANKS = ['Management', 'Support']
 MNG_RANKS = [706853081178046524, 756582609232068668]
 if config.get('debug', default=False):
-    #tester rank
+    # tester rank
     MNG_RANKS.append(835892359651917834)
 __VERSION__ = config.get('version')
+
 
 if __name__ == '__main__':
     QUIT_CALLED = False

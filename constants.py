@@ -1,8 +1,10 @@
 import operator
 from difflib import SequenceMatcher
+
 from discord.ext.commands.errors import BadArgument
 
 import db_handling
+
 
 EU_REALM_NAMES = ("Aegwynn", "Aerie Peak", "Agamaggan", "Aggra (Português)", "Aggramar", "Ahn'Qiraj", "Al'Akir", "Alexstrasza", "Alleria", "Alonsus", "Aman'Thul",
 "Ambossar", "Anachronos", "Anetheron", "Antonidas", "Anub'arak", "Arak-arahm", "Arathi", "Arathor", "Archimonde", "Area 52", "Argent Dawn", "Arthas",
@@ -28,6 +30,7 @@ EU_REALM_NAMES = ("Aegwynn", "Aerie Peak", "Agamaggan", "Aggra (Português)", "A
 "The Venture Co", "Theradras", "Thermaplugg", "Thrall", "Throk'Feroth", "Thunderhorn", "Tichondrius", "Tirion", "Todeswache", "Trollbane", "Turalyon", "Twilight's Hammer",
 "Twisting Nether", "Tyrande", "Uldaman", "Ulduar", "Uldum", "Un'Goro", "Varimathras", "Vashj", "Vek'lor", "Vek'nilash", "Vol'jin", "Wildhammer", "Wrathbringer", "Xavius",
 "Ysera", "Ysondre", "Zenedar", "Zirkel des Cenarius", "Zul'jin", "Zuluhed")
+
 
 def is_valid_realm(realm_name, check_aliases=False):
     if realm_name is None:

@@ -1,8 +1,9 @@
-import discord.errors
-from discord.ext import tasks, commands
 from datetime import datetime, timedelta
 import logging
 import traceback
+
+import discord.errors
+from discord.ext import tasks, commands
 
 import globals
 import booster_bot

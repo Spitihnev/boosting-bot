@@ -1,11 +1,12 @@
-from dateutil import tz
 import re
-import discord
-from discord.ext.commands.errors import BadArgument
 import logging
 import datetime
 from typing import List, Union
 import asyncio
+
+import discord
+from discord.ext.commands.errors import BadArgument
+from dateutil import tz
 
 import constants
 import globals

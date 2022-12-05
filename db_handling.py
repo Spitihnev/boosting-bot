@@ -1,9 +1,11 @@
-import pymysql
 import logging
 import traceback
 import typing
-import discord
 from collections import defaultdict
+
+import discord
+import pymysql
+
 import config
 import constants
 
