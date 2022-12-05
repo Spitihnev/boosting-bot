@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
         await ctx.message.channel.send('Leaving...')
         QUIT_CALLED = True
-        #to process anything in progress
+        # to process anything in progress
         await asyncio.sleep(5)
         await client.close()
 
@@ -633,13 +633,13 @@ if __name__ == '__main__':
         except discord.errors.NotFound:
             LOG.error('Message with id %s no longer exists (404)', boost_id)
             globals.open_boosts.pop(boost_id)
-            await ctx.message.channel.send(f'Boost {boost_id} cancelled.')
+            await ctx.boost_msg.channel.send(f'Boost {boost_id} cancelled, boost message was already deleted.')
             return
         if boost_obj is not None:
             boost_obj.status = 'closed'
             globals.open_boosts.pop(boost_id)
-            await boost_msg.edit(embed=boost_obj.embed())
-            await ctx.message.channel.send(f'Boost {boost_id} cancelled.')
+            boost_msg = await boost_msg.edit(embed=boost_obj.embed())
+            await boost_msg.channel.send(f'Boost {boost_id} cancelled.')
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
