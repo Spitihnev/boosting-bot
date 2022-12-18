@@ -61,7 +61,6 @@ class BoostCallback(commands.Cog):
 
     @tasks.loop(seconds=5.0)
     async def update_boosts(self):
-        LOG.debug('boost callback called')
         #async with globals.lock:
         try:
             for boost_uuid, (msg, (boost_obj, lock)) in globals.open_boosts.items():
