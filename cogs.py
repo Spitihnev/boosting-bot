@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import logging
 import traceback
+import asyncio
 
 import discord.errors
 from discord.ext import tasks, commands
@@ -60,6 +61,7 @@ class BoostCallback(commands.Cog):
 
     @tasks.loop(seconds=5.0)
     async def update_boosts(self):
+        LOG.debug('boost callback called')
         #async with globals.lock:
         try:
             for boost_uuid, (msg, (boost_obj, lock)) in globals.open_boosts.items():
@@ -77,7 +79,7 @@ class BoostCallback(commands.Cog):
                     if boost_obj.start_boost():
                         edited_msg = await msg.edit(embed=boost_obj.embed())
                         globals.open_boosts[boost_uuid] = edited_msg, (boost_obj, lock)
-                        await edited_msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]))
+                        await edited_msg.channel.send(f'Boost {boost_obj.uuid} started: ' + ' '.join([b.mention for b in boost_obj.boosters]), reference=edited_msg)
         except (RuntimeError, discord.errors.HTTPException):
             LOG.exception('update_boosts exception! ')
             await self.bot.get_user(config.get('my_id')).send(f'Cog exception: {traceback.format_exc()}')

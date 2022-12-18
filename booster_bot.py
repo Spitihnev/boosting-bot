@@ -639,7 +639,7 @@ if __name__ == '__main__':
             boost_obj.status = 'closed'
             globals.open_boosts.pop(boost_id)
             boost_msg = await boost_msg.edit(embed=boost_obj.embed())
-            await boost_msg.channel.send(f'Boost {boost_id} cancelled.')
+            await boost_msg.channel.send(f'Boost {boost_id} cancelled.', reference=boost_msg)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1073,10 +1073,8 @@ if __name__ == '__main__':
 
 
 async def post_setup(client):
-    await client.add_cog(cogs.TrackerCallback(client))
     await client.add_cog(cogs.BoostCallback(client))
-
+    await client.start(config.get('token'))
 
 if __name__ == '__main__':
     asyncio.run(post_setup(client))
-    client.run(config.get('token'))
