@@ -14,8 +14,11 @@ import globals
 LOG = logging.getLogger(__name__)
 
 
-def is_mention(msg):
-    return bool(re.match(r'^<@?[#!&]?([0-9])+>$', msg))
+def is_mention(msg, include_roles=True):
+    if include_roles:
+        return bool(re.match(r'^<@?[#!&]?([0-9])+>$', msg))
+    else:
+        return bool(re.match(r'^<@([0-9])+>$', msg))
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------

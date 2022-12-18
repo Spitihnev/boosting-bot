@@ -494,7 +494,7 @@ if __name__ == '__main__':
 
             await ctx.message.channel.send('Want to have anyone already signed for the boost? use mention')
             boosters = await client.wait_for('message', check=msg_author_check(ctx.message.author, ctx.message.channel), timeout=timeout)
-            boosters = [booster for booster in boosters.content.split() if is_mention(booster)]
+            boosters = [booster for booster in boosters.content.split() if is_mention(booster, include_roles=False)]
 
             boosters_objects = []
             is_anyone_keyholder = False
